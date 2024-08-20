@@ -18,6 +18,9 @@ require(MASS)
 require(furrr)
 require(purrr)
 require(foreach)
+require(tune)
+require(doParallel)
+require(foreach)
 
 
 select <- dplyr::select
@@ -276,7 +279,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
     j <- 1
     MLE_with_uncertainty <- foreach(i = samples, .packages = c("tidyverse", "here")) %dopar% {
       cat("\n", j)
-      source(here("scripts","likelihood_functions.R"))
+      source(here("scripts","functions_inference.R"))
       j <- j+1
       temp <- sampled_experimental_data %>% 
         filter(iteration == i) %>%
@@ -346,7 +349,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
       MLE_with_uncertainty <- foreach(i = samples, .packages = c("tidyverse", "here")) %dopar% {
         cat("\n", j)
         print("in loop")
-        source(here("scripts","likelihood_functions.R"))
+        source(here("scripts", "functions_inference.R"))
         j <- j+1
         temp <- sampled_experimental_data %>% 
           filter(iteration == i) %>%
@@ -970,7 +973,7 @@ figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples,
     intensity_scatter + pair_histogram + 
     plot_layout(ncol = 1, heights = c(1,2,1)) 
   
-  # ggsave(here(results_folder, "figure.png"), figure, width = 5, height = 10)
+  ggsave(here(results_folder, "figure.png"), figure, width = 5, height = 10)
   
   
 }

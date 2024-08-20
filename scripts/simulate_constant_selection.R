@@ -19,7 +19,7 @@ n_epi <- 3
 rerun <- TRUE
 
 
-out_folder <- here("results","simulations_with_selection")
+out_folder <- here("results","simulations_constant_selection")
 
 if(!file.exists(out_folder)) dir.create(out_folder, showWarnings = F)
 

@@ -18,7 +18,7 @@ n_epi <- 3
 # Indicator if simulations should be rerun (TRUE) or loaded from previous run (FALSE)
 rerun <- FALSE
 
-out_folder <- here("results","simulations_updated")
+out_folder <- here("results","simulations_constant")
 
 if(!file.exists(out_folder)) dir.create(out_folder, showWarnings = F)
 

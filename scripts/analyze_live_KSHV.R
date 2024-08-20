@@ -24,7 +24,7 @@ set.seed(1234)
 # Script inputs
 
 # Folder for results
-results_folder <- here("results", "Figure_6_updated_pdf_n_prior")
+results_folder <- here("results", "live_KSHV")
 
 # Daughter cell intensity data
 daughter_cell_file <- "live_KSHV_dividing_cells.xlsx"
@@ -40,11 +40,10 @@ daughter_cell_data <- live_KSHV_data$daughter_cell_data
 mother_cell_data <- live_KSHV_data$mother_cell_data
 
 live_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder, same_mu = F,
-                                n_prior = list("geom", 0.5), parallel = F, just_Pr = F)
+                                n_prior = list("geom", 0.5), parallel = T)
 
 
 live_KSHV_results$MLE_grid$estimates
-# live_KSHV_results$MLE_Pr_grid$estimates
 
 
 ## Adjust confidence intervals to be marginal:
@@ -138,3 +137,4 @@ live_KSHV_results$all_chains %>%
   select(mu_d, tau_d, mu_m, tau_m) %>% 
   mutate(sd_d = sqrt(1/tau_d), sd_m = sqrt(1/tau_m)) %>% 
   apply(2, sd)
+

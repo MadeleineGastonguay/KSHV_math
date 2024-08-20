@@ -44,7 +44,7 @@ cat(length(unique(daughter_cell_data$mother_cell_id)), "daughter cell pairs with
 cat(length(unique(mother_cell_data$cell_id)), "non-dividing cells with", nrow(mother_cell_data), "clusters")
 
 fixed_8TR_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder, 
-                                n_prior = list("geom", 0.5), parallel = T, just_Pr = F)
+                                n_prior = list("geom", 0.5), parallel = T)
 
 fixed_8TR_results$MLE_grid$estimates
 

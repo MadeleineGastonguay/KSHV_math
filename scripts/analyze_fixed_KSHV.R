@@ -39,7 +39,7 @@ daughter_cell_data <- fixed_KSHV_data$daughter_cell_data
 mother_cell_data <- fixed_KSHV_data$mother_cell_data
 
 fixed_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder,
-                                n_prior = list("geom", 0.5), parallel = T, just_Pr = F)
+                                n_prior = list("geom", 0.5), parallel = T)
 
 fixed_KSHV_results$MLE_grid$estimates
 
