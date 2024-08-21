@@ -7,6 +7,10 @@
 safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", 
                              "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888")
 
+#####
+# Functions for Simulation
+#####
+
 makeChildren<- function(pRep, pSeg, numEpisomes){
   if(numEpisomes == 0){
     return(c(0, 0))
@@ -65,7 +69,8 @@ simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero
   }
 }
 
-extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cells = 1000, n_cells_start = NULL){
+extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cells = 1000, n_cells_start = NULL,
+                       d = 1, b = 3, stop_time = NULL, growth_advantage = NULL){
   
   results = 1:nTrials*0
   times = c()
@@ -89,14 +94,15 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
   for(z in 1:nTrials){
     print(z)
     time = 0
-    deathVec = rep(1, 10)
+    deathVec = rep(d, 10)
     cells = rep(0, 10)
     cells[n_epi + 1] <- n_cells_start
     total = sum((0:9)*cells)
     indicator <- T
     while(indicator){
       if(time > 700 & pRep == 1 & pSeg == 1) break
-      birthVec = rep(2*(1-sum(cells)/n_cells) + 1, 10)
+      birthVec = rep((b-d)*(1-sum(cells)/n_cells) + d, 10)
+      if(!is.null(growth_advantage)) birthVec = birthVec*growth_advantage
       result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero = selectAgainstZero, max_epi = 9)
       cells = result[[2]]
       time=time + result[[1]]
@@ -120,9 +126,11 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
       }
       j <- j + 1
       
+      # if end time provided, stop then. Otherwise:
       # if simulating with selection, run for 700 generations
       # if simulating without selection, run until there are no more episomes
-      indicator <- ifelse(selectAgainstZero, time <= 700 & total > 0, total > 0)
+      indicator <- ifelse(!is.null(stop_time), time <= stop_time, 
+                          ifelse(selectAgainstZero, time <= 700 & total > 0, total > 0))
       # indicator <- total > 0
     }
     results[z]= time
@@ -150,7 +158,8 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
   return(list(ExtinctionTime = tibble(ExtinctionTime = results), Totals = total_df))
 }
 
-exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi){
+exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
+                               stop_size = NULL, d = 0, b = 1, growth_advantage = NULL){
   #try using matrix first and then convert to data frame
   # rm(data)
   dataCUT = 1
@@ -163,7 +172,7 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
   z = 1
   for(run in 1:nRuns){
     print(run)
-    deathVec = rep(0, max_epi + 1)
+    deathVec = rep(d, max_epi + 1)
     cells = rep(0, max_epi + 1)
     # Start with n_cells_start cells each with n_epi_start episomes
     cells[n_epi_start+1] <- n_cells_start
@@ -181,7 +190,8 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
     #data <- rbind(data, data.frame(run=run, time=times[1], episomes=-1, count = sum((0:9)*cells)))
     for(i in 1:nIts){
       
-      birthVec = rep(1, max_epi + 1)
+      birthVec = rep(b, max_epi + 1)
+      if(!is.null(growth_advantage)) birthVec = birthVec*growth_advantage
       result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selection, max_epi)
       cells = result[[2]]
       times[i+1] = times[i] + result[[1]]
@@ -201,6 +211,20 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
         data[z,] <- tmp
         z= z+1
         #data <- rbind(data, data.frame(run=run, time=times[i+1], episomes=-1, count = sum((0:9)*cells)))
+      
+      }
+      
+      if(!is.null(stop_size)){
+        if(sum(cells) >= stop_size){
+          for(j in 1:length(cells)){
+            tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+            data[z,] <- tmp
+            z = z+1
+          }
+          tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+          data[z,] <- tmp
+          break
+        } 
       }
     }
     
