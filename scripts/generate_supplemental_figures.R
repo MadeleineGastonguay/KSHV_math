@@ -16,54 +16,41 @@ theme_set(theme_bw())
 #####
 ## Load in results
 
-# results_folder_suffix <- "updated"
-results_folder_suffix <- "updated_pdf_n_prior"
-supplemental_folder <- paste0("supplemental_figures_", results_folder_suffix)
+supplemental_folder <- "supplemental_figures"
 
-# Figure 2
-results_folder <- here("results", str_interp("Figure_2_${results_folder_suffix}"))
-daughter_cell_file <- "Figure 2 dots new version.xlsx"
-mother_cell_file <- "Figure 2 non dividing cells 2.xlsx"
-Figure2_data <- load_data(mother_cell_file, daughter_cell_file)
-daughter_cell_data <- Figure2_data$daughter_cell_data
-mother_cell_data <- Figure2_data$mother_cell_data
-Figure2_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder)
+# Fixed 8TR
+results_folder <- here("results", "fixed_8TR")
+daughter_cell_file <- "fixed_8TR_dividing_cells.xlsx"
+mother_cell_file <- "fixed_8TR_non_dividing_cells.xlsx"
+fixed_8TR_data <- load_data(mother_cell_file, daughter_cell_file)
+daughter_cell_data <- fixed_8TR_data$daughter_cell_data
+mother_cell_data <- fixed_8TR_data$mother_cell_data
+fixed_8TR_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder)
 
-# Figure 3
-results_folder <- here("results", str_interp("Figure_3_${results_folder_suffix}"))
-daughter_cell_file <- "Fig3 dividing cells.xlsx"
-mother_cell_file <- "Fig3 Non dividing cells.xlsx"
-Figure3_data <- load_data(mother_cell_file, daughter_cell_file)
-daughter_cell_data <- Figure3_data$daughter_cell_data
-mother_cell_data <- Figure3_data$mother_cell_data
-Figure3_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder)
+# Fixed KSHV
+results_folder <- here("results", "fixed_KSHV")
+daughter_cell_file <- "fixed_KSHV_dividing_cells.xlsx"
+mother_cell_file <- "fixed_KSHV_non_dividing_cells.xlsx"
+fixed_KSHV_data <- load_data(mother_cell_file, daughter_cell_file)
+daughter_cell_data <- fixed_KSHV_data$daughter_cell_data
+mother_cell_data <- fixed_KSHV_data$mother_cell_data
+fixed_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder)
 
-# Figure 5
-results_folder <- here("results", str_interp("Figure_5_${results_folder_suffix}"))
-daughter_cell_file <- "Fig5 dividing cells.xlsx"
-mother_cell_file <- "Fig5 Non dividing cells.xlsx"
-Figure5_data <- load_data(mother_cell_file, daughter_cell_file)
-daughter_cell_data <- Figure5_data$daughter_cell_data
-mother_cell_data <- Figure5_data$mother_cell_data
-Figure5_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder)
-
-# Figure 6
-if(results_folder_suffix == "updated"){
-  results_folder <- here("results", str_interp("Figure_6_different_mean"))
-}else{
-  results_folder <- here("results", str_interp("Figure_6_${results_folder_suffix}"))  
-}
-daughter_cell_file <- "Fig6 dividing cells.xlsx"
-mother_cell_file <- "Fig6 Non dividing cells.xlsx"
-Figure6_data <- load_data(mother_cell_file, daughter_cell_file)
-daughter_cell_data <- Figure6_data$daughter_cell_data
-mother_cell_data <- Figure6_data$mother_cell_data
-Figure6_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder, same_mu = F)
+# Live KSHV
+results_folder <- here("results", "live_KSHV")
+daughter_cell_file <- "live_KSHV_dividing_cells.xlsx"
+mother_cell_file <- "live_KSHV_non_dividing_cells.xlsx"
+live_KSHV_data <- load_data(mother_cell_file, daughter_cell_file)
+daughter_cell_data <- live_KSHV_data$daughter_cell_data
+mother_cell_data <- live_KSHV_data$mother_cell_data
+live_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder, same_mu = F)
 
 #####
 
 
 MCMC_vs_data <-  function(pipeline_output, data, results_folder, dataset,  same_mu = T, normalize = T){
+  
+  # browser()
   
   all_chains <- pipeline_output$all_chains
   daughter_cell_samples <- pipeline_output$daughter_cell_samples
@@ -106,8 +93,8 @@ MCMC_vs_data <-  function(pipeline_output, data, results_folder, dataset,  same_
              min_episome_in_cluster = factor(min_episome_in_cluster, levels = 1:4))
   }else{
     if(!same_mu){
-      daughter_mean_intensity <- DescTools::Mode(round(all_chains$mu_d,1))
-      mother_mean_intensity <- DescTools::Mode(round(all_chains$mu_m,1))
+      daughter_mean_intensity <- DescTools::Mode(round(all_chains$mu_d))
+      mother_mean_intensity <- DescTools::Mode(round(all_chains$mu_m))
       
       dat <- intensity_data %>% 
         merge(cluster_modes) %>% 
@@ -116,7 +103,7 @@ MCMC_vs_data <-  function(pipeline_output, data, results_folder, dataset,  same_
                set = str_to_title(paste(set, "cell")),
                min_episome_in_cluster = factor(min_episome_in_cluster, levels = 1:4))
     }else{
-      mean_intensity <- DescTools::Mode(round(all_chains$mu,1))
+      mean_intensity <- DescTools::Mode(round(all_chains$mu))
       
       dat <- intensity_data %>% 
         merge(cluster_modes) %>%
@@ -200,10 +187,9 @@ MCMC_vs_data <-  function(pipeline_output, data, results_folder, dataset,  same_
   # plot_layout(ncol = 2, heights = c(1,3), widths = c(3,1), guides = "collect")
   
   file <- switch(tolower(dataset),
-                 "fixed 8tr" = "Figure2",
-                 "live 8tr" = "Figure3",
-                 "fixed kshv" = "Figure5",
-                 "live kshv" = "Figure6")
+                 "fixed 8tr" = "fixed_8TR",
+                 "fixed kshv" = "fixed_KSHV",
+                 "live kshv" = "live_KSHV")
   file <- paste0(file, "_MCMC_inference.png")
   
   ggsave(here(results_folder, file), plot, width = 8, height = 5)
@@ -213,12 +199,11 @@ MCMC_vs_data <-  function(pipeline_output, data, results_folder, dataset,  same_
 file_path <- here("results", supplemental_folder)
 if(!dir.exists(file_path ))dir.create(file_path)
 
-MCMC_vs_data(Figure2_results, Figure2_data, file_path, "Fixed 8TR", normalize = T)  
-MCMC_vs_data(Figure3_results, Figure3_data, file_path, "Live 8TR", normalize = T)  
-MCMC_vs_data(Figure5_results, Figure5_data, file_path, "Fixed KSHV", normalize = T)  
-MCMC_vs_data(Figure6_results, Figure6_data, file_path, "Live KSHV", same_mu = F, normalize = T)  
+MCMC_vs_data(fixed_8TR_results, fixed_8TR_data, file_path, "Fixed 8TR", normalize = T)  
+MCMC_vs_data(fixed_KSHV_results, fixed_KSHV_data, file_path, "Fixed KSHV", normalize = T)  
+MCMC_vs_data(live_KSHV_results, live_KSHV_data, file_path, "Live KSHV", same_mu = F, normalize = T)  
 
-certain_example <- Figure5_results$all_chains %>% filter(chain == "chain1") %>% 
+certain_example <- fixed_KSHV_results$all_chains %>% filter(chain == "chain1") %>% 
   ggplot(aes(d1, after_stat(count/sum(count)))) + 
   geom_bar(aes(fill = max(after_stat(count/sum(count)))), show.legend = F) + 
   labs(x = "Number of episomes in LANA dot", y = "Posterior probability") +
@@ -226,7 +211,7 @@ certain_example <- Figure5_results$all_chains %>% filter(chain == "chain1") %>%
   ylim(c(0,1)) + 
   scale_fill_viridis_c(limits = c(0, 1), direction = -1) 
 
-uncertain_example <- Figure5_results$all_chains %>% filter(chain == "chain1") %>% 
+uncertain_example <- fixed_KSHV_results$all_chains %>% filter(chain == "chain1") %>% 
   ggplot(aes(d47, after_stat(count/sum(count)))) + 
   geom_bar(aes(fill = max(after_stat(count/sum(count)))), show.legend = F) + 
   labs(x = "Number of episomes in LANA dot", y = "Posterior probability") +
@@ -235,7 +220,7 @@ uncertain_example <- Figure5_results$all_chains %>% filter(chain == "chain1") %>
   scale_x_continuous(breaks = 1:10) +
   scale_fill_viridis_c(limits = c(0, 1), direction = -1)
 
-uncertain_example2 <- Figure5_results$all_chains %>% filter(chain == "chain1") %>% 
+uncertain_example2 <- fixed_KSHV_results$all_chains %>% filter(chain == "chain1") %>% 
   ggplot(aes(d28, after_stat(count/sum(count)))) + 
   geom_bar(aes(fill = max(after_stat(count/sum(count)))), show.legend = F) + 
   labs(x = "Number of episomes in LANA dot", y = "Posterior probability") +
@@ -245,8 +230,8 @@ uncertain_example2 <- Figure5_results$all_chains %>% filter(chain == "chain1") %
   scale_fill_viridis_c(limits = c(0, 1), direction = -1)
 
 ggsave(here(file_path, "certain_example.png"), certain_example, width = 3, height = 2)
-ggsave(here(file_path, "uncertain_example.png"), uncertain_example, width = 3, height = 2)
-ggsave(here(file_path, "intermediate_example.png"), uncertain_example2, width = 3, height = 2)
+ggsave(here(file_path, "uncertain_example.png"), uncertain_example2, width = 3, height = 2)
+# ggsave(here(file_path, "intermediate_example.png"), uncertain_example2, width = 3, height = 2)
 
 # Plot MLE grids for all conditions
 plot_grid <- function(results, dataset, file_path){
@@ -255,10 +240,9 @@ plot_grid <- function(results, dataset, file_path){
     theme(plot.caption = element_blank(), plot.background = element_blank())
   
   file <- switch(tolower(dataset),
-                 "fixed 8tr" = "Figure2",
-                 "live 8tr" = "Figure3",
-                 "fixed kshv" = "Figure5",
-                 "live kshv" = "Figure6")
+                 "fixed 8tr" = "fixed_8TR",
+                 "fixed kshv" = "fixed_KSHV",
+                 "live kshv" = "live_KSHV")
   file <- paste0(file, "_MLE_grid.png")
   
   
@@ -266,10 +250,9 @@ plot_grid <- function(results, dataset, file_path){
   
 }
 
-plot_grid(Figure2_results, "Fixed 8TR", file_path)
-plot_grid(Figure3_results, "Live 8TR", file_path)
-plot_grid(Figure5_results, "Fixed KSHV", file_path)
-plot_grid(Figure6_results, "Live KSHV", file_path)
+plot_grid(fixed_8TR_results, "Fixed 8TR", file_path)
+plot_grid(fixed_KSHV_results, "Fixed KSHV", file_path)
+plot_grid(live_KSHV_results, "Live KSHV", file_path)
 
 
 #####
@@ -277,36 +260,29 @@ plot_grid(Figure6_results, "Live KSHV", file_path)
 #####
 
 pdf(here(file_path, "silhouette_plot.pdf"))
-intensity_data <- rbind(select(Figure2_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-                        select(Figure2_data$mother_cell_data, cluster_id, total_cluster_intensity))
-Figure2_sil <- calc_sil(intensity_data, Figure2_results$all_chains)
-fviz_silhouette(Figure2_sil) + 
+intensity_data <- rbind(select(fixed_8TR_data$daughter_cell_data, cluster_id, total_cluster_intensity),
+                        select(fixed_8TR_data$mother_cell_data, cluster_id, total_cluster_intensity))
+fixed_8TR_sil <- calc_sil(intensity_data, fixed_8TR_results$all_chains)
+fviz_silhouette(fixed_8TR_sil) + 
   scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
   theme(panel.grid = element_blank())
 
-intensity_data <- rbind(select(Figure3_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-                        select(Figure3_data$mother_cell_data, cluster_id, total_cluster_intensity))
-Figure3_sil <- calc_sil(intensity_data, Figure3_results$all_chains)
-fviz_silhouette(Figure3_sil) +
+intensity_data <- rbind(select(fixed_KSHV_data$daughter_cell_data, cluster_id, total_cluster_intensity),
+                        select(fixed_KSHV_data$mother_cell_data, cluster_id, total_cluster_intensity))
+fixed_KSHV_sil <- calc_sil(intensity_data, fixed_KSHV_results$all_chains)
+fviz_silhouette(fixed_KSHV_sil) +
   scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
   theme(panel.grid = element_blank())
 
-intensity_data <- rbind(select(Figure5_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-                        select(Figure5_data$mother_cell_data, cluster_id, total_cluster_intensity))
-Figure5_sil <- calc_sil(intensity_data, Figure5_results$all_chains)
-fviz_silhouette(Figure5_sil) +
+# intensity_data <- rbind(select(live_KSHV_data$daughter_cell_data, cluster_id, total_cluster_intensity),
+#                         select(live_KSHV_data$mother_cell_data, cluster_id, total_cluster_intensity))
+live_KSHV_sil <- calc_sil(live_KSHV_data$daughter_cell_data, live_KSHV_results$all_chains)
+fviz_silhouette(live_KSHV_sil) +
   scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
   theme(panel.grid = element_blank())
 
-# intensity_data <- rbind(select(Figure6_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-#                         select(Figure6_data$mother_cell_data, cluster_id, total_cluster_intensity))
-Figure6_sil <- calc_sil(Figure6_data$daughter_cell_data, Figure6_results$all_chains)
-fviz_silhouette(Figure6_sil) +
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
-  theme(panel.grid = element_blank())
-
-Figure6_sil <- calc_sil(Figure6_data$mother_cell_data, Figure6_results$all_chains)
-fviz_silhouette(Figure6_sil)+
+live_KSHV_sil <- calc_sil(live_KSHV_data$mother_cell_data, live_KSHV_results$all_chains)
+fviz_silhouette(live_KSHV_sil)+
   scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1))  +
   theme(panel.grid = element_blank())
 
@@ -321,8 +297,8 @@ MCMC_performance <- function(results, results_folder, dataset, same_mu = T){
   
   if(!same_mu) results$all_chains <- results$all_chains %>% rename(mu = mu_d, tau = tau_d)
   
-  inferred_mu <- round(DescTools::Mode(round(results$all_chains$mu, 1)))
-  inferred_sigma <- round(DescTools::Mode(round(sqrt(1/results$all_chains$tau), 1)))
+  inferred_mu <- round(DescTools::Mode(round(results$all_chains$mu)))
+  inferred_sigma <- round(DescTools::Mode(round(sqrt(1/results$all_chains$tau))))
   
   p1 <- results$all_chains %>% 
     ggplot(aes(iteration, mu, color = chain)) + 
@@ -368,10 +344,9 @@ MCMC_performance <- function(results, results_folder, dataset, same_mu = T){
   plot <- cowplot::plot_grid(p1, p2, p3, nrow = 1)
   
   file <- switch(tolower(dataset),
-                 "fixed 8tr" = "Figure2",
-                 "live 8tr" = "Figure3",
-                 "fixed kshv" = "Figure5",
-                 "live kshv" = "Figure6")
+                 "fixed 8tr" = "fixed_8TR",
+                 "fixed kshv" = "fixed_KSHV",
+                 "live kshv" = "live_KSHV")
   if(!same_mu) file <- paste0(file, "_daughter")
   file <- paste0(file, "_MCMC_performance.png")
   
@@ -381,8 +356,8 @@ MCMC_performance <- function(results, results_folder, dataset, same_mu = T){
     # browser()
     results$all_chains <- results$all_chains %>% select(-mu, -tau) %>% rename(mu = mu_m, tau = tau_m)
     
-    inferred_mu <- round(DescTools::Mode(round(results$all_chains$mu,1)))
-    inferred_sigma <- round(DescTools::Mode(round(sqrt(1/results$all_chains$tau),1)))
+    inferred_mu <- round(DescTools::Mode(round(results$all_chains$mu)))
+    inferred_sigma <- round(DescTools::Mode(round(sqrt(1/results$all_chains$tau))))
     
     p1 <- results$all_chains %>% 
       ggplot(aes(iteration, mu, color = chain)) + 
@@ -428,10 +403,9 @@ MCMC_performance <- function(results, results_folder, dataset, same_mu = T){
     plot <- cowplot::plot_grid(p1, p2, p3, nrow = 1)
     
     file <- switch(tolower(dataset),
-                   "fixed 8tr" = "Figure2",
-                   "live 8tr" = "Figure3",
-                   "fixed kshv" = "Figure5",
-                   "live kshv" = "Figure6")
+                   "fixed 8tr" = "fixed_8TR",
+                   "fixed kshv" = "fixed_KSHV",
+                   "live kshv" = "live_KSHV")
     if(!same_mu) file <- paste0(file, "_mother")
     file <- paste0(file, "_MCMC_performance.png")
     
@@ -440,7 +414,7 @@ MCMC_performance <- function(results, results_folder, dataset, same_mu = T){
   
 }
 
-MCMC_performance(Figure2_results, file_path, "Fixed 8TR")
-MCMC_performance(Figure3_results, file_path, "Live 8TR")
-MCMC_performance(Figure5_results, file_path, "Fixed KSHV")
-MCMC_performance(Figure6_results, file_path, "Live KSHV", same_mu = F)
+MCMC_performance(fixed_8TR_results, file_path, "Fixed 8TR")
+MCMC_performance(fixed_KSHV_results, file_path, "Fixed KSHV")
+MCMC_performance(live_KSHV_results, file_path, "Live KSHV", same_mu = F)
+
