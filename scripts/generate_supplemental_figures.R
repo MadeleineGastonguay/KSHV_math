@@ -256,39 +256,6 @@ plot_grid(live_KSHV_results, "Live KSHV", file_path)
 
 
 #####
-# Silhuoette plots to assess cluster quality
-#####
-
-pdf(here(file_path, "silhouette_plot.pdf"))
-intensity_data <- rbind(select(fixed_8TR_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-                        select(fixed_8TR_data$mother_cell_data, cluster_id, total_cluster_intensity))
-fixed_8TR_sil <- calc_sil(intensity_data, fixed_8TR_results$all_chains)
-fviz_silhouette(fixed_8TR_sil) + 
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
-  theme(panel.grid = element_blank())
-
-intensity_data <- rbind(select(fixed_KSHV_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-                        select(fixed_KSHV_data$mother_cell_data, cluster_id, total_cluster_intensity))
-fixed_KSHV_sil <- calc_sil(intensity_data, fixed_KSHV_results$all_chains)
-fviz_silhouette(fixed_KSHV_sil) +
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
-  theme(panel.grid = element_blank())
-
-# intensity_data <- rbind(select(live_KSHV_data$daughter_cell_data, cluster_id, total_cluster_intensity),
-#                         select(live_KSHV_data$mother_cell_data, cluster_id, total_cluster_intensity))
-live_KSHV_sil <- calc_sil(live_KSHV_data$daughter_cell_data, live_KSHV_results$all_chains)
-fviz_silhouette(live_KSHV_sil) +
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1)) +
-  theme(panel.grid = element_blank())
-
-live_KSHV_sil <- calc_sil(live_KSHV_data$mother_cell_data, live_KSHV_results$all_chains)
-fviz_silhouette(live_KSHV_sil)+
-  scale_y_continuous(breaks = c(-0.5, 0, 0.5, 1), limits = c(-0.5, 1))  +
-  theme(panel.grid = element_blank())
-
-dev.off()
-
-#####
 # Make supplemental figures to show the chain's performance
 
 MCMC_performance <- function(results, results_folder, dataset, same_mu = T){

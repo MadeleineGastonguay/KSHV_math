@@ -11,6 +11,7 @@ safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#33228
 # Functions for Simulation
 #####
 
+# Simulates the fate of episomes during cell divison
 makeChildren<- function(pRep, pSeg, numEpisomes){
   if(numEpisomes == 0){
     return(c(0, 0))
@@ -25,6 +26,7 @@ makeChildren<- function(pRep, pSeg, numEpisomes){
   }
 }
 
+# Simulates one step of the cell population dynamics (either cell birth or death) and advances the time
 simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero = T, max_epi){
   #all FUN arguments are functions
   #cells is a compressed vector of the number of cells with 0, 1, 2, ... episomes
@@ -69,6 +71,7 @@ simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero
   }
 }
 
+# Simulates multiple populations (nTrials) of cells with a constant size that may or may not be under selection (selectAgainstZero)
 extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cells = 1000, n_cells_start = NULL,
                        d = 1, b = 3, stop_time = NULL, growth_advantage = NULL){
   
@@ -158,74 +161,127 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
   return(list(ExtinctionTime = tibble(ExtinctionTime = results), Totals = total_df))
 }
 
+# Simulates multiple populations (nRuns) of exponentially growing cells that may or may not be under selection (selectAgainstZero)
 exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
-                               stop_size = NULL, d = 0, b = 1, growth_advantage = NULL){
+                               stop_size = NULL, d = 0, b = 1, growth_advantage = NULL, initial_conditions = NULL, 
+                               start_times = 0, stop_time = NULL){
+  
   #try using matrix first and then convert to data frame
   # rm(data)
   dataCUT = 1
   start = 1:100
   mid = 11:100*10
-  end = 2:100*1000
+  end = seq(2*1000, 1e5, by = 1000)
   recordList = c(start, mid, end)
-  data <- matrix(NA, nrow=2*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
+  if(stop_size > max(end)){
+    recordList = c(recordList, seq(1e5, 1.25e5, by = 100), seq(1.25e5, min(1e6, stop_size), by = 5000))
+    if(stop_size > 1e6) recordList = c(recordList, seq(1e6, stop_size, by = 10000))
+  }
+  # data <- matrix(NA, nrow=500*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
+  data <- matrix(NA, nrow=100*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
+  # data <- matrix(NA, nrow=nIts*nRuns, ncol=5)
+  print(dim(data))
   names(data) = c("run", "time", "episomes", "frac", "total")
   z = 1
   for(run in 1:nRuns){
-    print(run)
+    cat("z:", z, "\n")
+    cat("run", run, "\n")
     deathVec = rep(d, max_epi + 1)
-    cells = rep(0, max_epi + 1)
-    # Start with n_cells_start cells each with n_epi_start episomes
-    cells[n_epi_start+1] <- n_cells_start
-    times = rep(0, nIts + 1)
+    if(is.null(initial_conditions)){
+      cells = rep(0, max_epi + 1)
+      # Start with n_cells_start cells each with n_epi_start episomes
+      cells[n_epi_start+1] <- n_cells_start
+    }else{
+      cells = unname(initial_conditions[run,])
+    }
+    if(length(start_times) == 1) start_times = rep(start_times, nRuns)
+    times = rep(start_times[run], nIts + 1)
     totalEps = append(c(sum((0:max_epi)*cells)), rep(0, nIts))
     for(j in 1:length(cells)){
       tmp = c(run, times[1], j-1, cells[j]/sum(cells), sum(cells))
-      data[z,] <- tmp
+      try({data[z,] <- tmp})
       z=z+1
     }
     
     tmp = c(run, times[1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells))
-    data[z,] <- tmp
+    try({data[z,] <- tmp})
     z= z+1
     #data <- rbind(data, data.frame(run=run, time=times[1], episomes=-1, count = sum((0:9)*cells)))
     for(i in 1:nIts){
       
+      # browser()
+      
       birthVec = rep(b, max_epi + 1)
-      if(!is.null(growth_advantage)) birthVec = birthVec*growth_advantage
+      if(!is.null(growth_advantage)) birthVec = birthVec*c(1, rep(1 + growth_advantage, max_epi))
+      # browser()
+      cells2 = cells
       result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selection, max_epi)
-      cells = result[[2]]
+      cells = round(result[[2]])
       times[i+1] = times[i] + result[[1]]
+      
+      if(any(cells*(birthVec + deathVec) < 0)){
+        print(cells)
+        print(birthVec)
+        print(deathVec)
+        
+        cat("\nprior:::\n")
+        
+        print(cells2)
+      }
+      
       #print(cells)
       totalEps[i+1] = sum((0:max_epi)*cells)
-      if(i%%1000 == 0){
-        print(i)
-      }
+      # if(i%%1000 == 0){
+      #   print(i)
+      # }
       if(sum(cells) %in% recordList){
         #print(i)
         for(j in 1:length(cells)){
           tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
-          data[z,] <- tmp
+          try({data[z,] <- tmp})
           z = z+1
         }
         tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
-        data[z,] <- tmp
+        try({data[z,] <- tmp})
         z= z+1
         #data <- rbind(data, data.frame(run=run, time=times[i+1], episomes=-1, count = sum((0:9)*cells)))
-      
+        
       }
+      
+      # print(sum(cells))
+      
+      if(sum(cells) == 0) break
       
       if(!is.null(stop_size)){
         if(sum(cells) >= stop_size){
           for(j in 1:length(cells)){
             tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
-            data[z,] <- tmp
+            try({data[z,] <- tmp})
             z = z+1
           }
           tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
-          data[z,] <- tmp
+          try({data[z,] <- tmp})
           break
         } 
       }
+      
+      if(!is.null(stop_time)){
+        if(times[i+1] >= stop_time){
+          for(j in 1:length(cells)){
+            tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+            try({data[z,] <- tmp})
+            z = z+1
+          }
+          tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+          try({data[z,] <- tmp})
+          break
+        } 
+      }
+      
+      # End if we run out of space in data
+      if(any(!is.na(data[nrow(data),]))) break
+      
+      
     }
     
     #plot(times, totalEps)
@@ -238,10 +294,91 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
 }
 
 
+# Simulates multiple KSHV-dependent tumors (nRuns) growing from one cell, with a reduction in segregation and/or replication efficiency once
+# the tumor reaches a defined size
+PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
+                            stop_size = 1.5e5, treatment_size = 1e5, d = 0, b = 1, growth_advantage = NULL, add_to = NULL, stop_time = NULL){
+  
+  if(is.null(add_to)){
+    
+    uncontrolled_growth <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
+                                              n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
+                                              selection, max_epi, stop_size = treatment_size, 
+                                              d = d, b = b, growth_advantage = growth_advantage, stop_time = stop_time)
+    
+    extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
+    
+    print(extinct_runs)
+    
+    while(length(extinct_runs) > 0){
+      
+      nRuns2 <- length(extinct_runs) 
+      
+      uncontrolled_growth2 <- exponential_growth(pRep, pSeg, 1e8, nRuns2, 
+                                                 n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
+                                                 selection, max_epi, stop_size = treatment_size, 
+                                                 d = d, b = b, growth_advantage = growth_advantage, stop_time = stop_time)
+      
+      run_dict <- extinct_runs %>% setNames(1:length(.))
+      
+      uncontrolled_growth2 <- uncontrolled_growth2 %>% mutate(run = recode(run, !!!run_dict))
+      
+      uncontrolled_growth <- rbind(uncontrolled_growth %>% filter(!run %in% extinct_runs),
+                                   uncontrolled_growth2) %>% arrange(run)
+      
+      extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
+    }
+    
+    initial_conditions <- uncontrolled_growth %>% group_by(run) %>% filter(time == max(time), episomes != -1) %>% 
+      mutate(number = frac*total) %>% distinct %>% ungroup %>% 
+      select(run, number, episomes) %>% pivot_wider(names_from = episomes, values_from = number) %>% 
+      column_to_rownames("run") %>% as.matrix()
+    
+    start_times <- uncontrolled_growth %>% group_by(run) %>% filter(time == max(time), episomes == 0) %>% 
+      distinct() %>% pull(time)
+    
+    out <- uncontrolled_growth %>% mutate(pRep = pRep, pSeg = pSeg)
+    
+  }else{
+  
+    initial_conditions <- add_to %>% select(-pRep, - pSeg) %>% 
+      group_by(run) %>% filter(time == min(time[total == treatment_size]), episomes != -1) %>% 
+      mutate(number = frac*total) %>% distinct %>% ungroup %>% 
+      select(run, number, episomes) %>% pivot_wider(names_from = episomes, values_from = number) %>% 
+      column_to_rownames("run") %>% as.matrix()
+    
+    start_times <- add_to %>% select(-pRep, - pSeg) %>% group_by(run) %>% 
+      filter(time == min(time[total == treatment_size]), episomes == 0) %>% 
+      distinct() %>% pull(time)
+    
+    out <- add_to
+  }
+  
+  
+  if(is.null(pRep_reduced)) pRep_reduced <- pRep
+  if(is.null(pSeg_reduced)) pSeg_reduced <- pSeg
+  
+  for(pRep in pRep_reduced){
+    for(pSeg in pSeg_reduced){
+      cat("\n", "pRep: ", pRep, " pSeg: ", pSeg, "\n")
+      intervention <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
+                                         selection = selection, max_epi = max_epi, stop_size = stop_size, 
+                                         d = d, b = b, growth_advantage = growth_advantage,
+                                         initial_conditions = initial_conditions, start_times = start_times, stop_time = stop_time) 
+      
+      out <- rbind(out, intervention %>% mutate(pRep = pRep, pSeg = pSeg))
+      
+    }
+  }
+  
+  return(out %>% arrange(run, time))
+}
+
 #####
 # Plotting functions
 #####
 
+# Function to format outputs of above functions
 pivot_extinction <- function(extinction_out){
   if(!is.data.frame(extinction_out)) extinction_out <- extinction_out$Totals
   extinction_out %>% 
@@ -254,6 +391,7 @@ pivot_extinction <- function(extinction_out){
     )
 }
 
+# Function to plot the number of episomes over time
 number_over_time <- function(extinction_long){
   extinction_long %>% ggplot(aes(time, number_of_cells, color = episomes_per_cell)) + 
     geom_point(alpha = 0.25) +  

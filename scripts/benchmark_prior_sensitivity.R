@@ -1,5 +1,7 @@
-### 
 # Systematically determine sensitivity to prior 
+
+### Setup ###################################################################### 
+
 library(tidyverse)
 library(here)
 library(furrr)
@@ -17,16 +19,19 @@ safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#33228
                              "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888")
 
 
-#####
-# Compare priors
+### Compare possible prior distributions #######################################
+
+# Use geometric distribution with various values for p
 geom_params <- expand_grid(ns = 1:100, param = seq(0.1,0.9,by= 0.1)) %>% 
   group_by(param) %>% 
   mutate(p = dgeom(ns, param)/sum(dgeom(1:100, param)))
 
+# Compare geometric priors to poisson prior
 prior_plot <- geom_params %>% 
   filter(param <= 0.6) %>% 
   ggplot(aes(ns, p, color = paste0("geom(", param, ")"), group = param)) + 
   geom_line(size = 1) + 
+  # add poisson prior
   geom_line(aes(ns, dpois(ns, 1), color = "poisson(1)"), size = 1) + 
   scale_x_continuous(limits = c(0,10), breaks = 0:10) + 
   labs(color = "prior for n_k", #caption = "poisson(1) in black for reference", 
@@ -36,53 +41,41 @@ prior_plot <- geom_params %>%
 
 ggsave(here("results","supplemental_figures_updated_pdf_n_prior", "n_prior_plot.png"), prior_plot, width = 4, height = 3)
 
-#####
-# Simulate data similar to fixed 8TR conditions in the case when there are likely 2 episomes per cluster
+### Simulate data similar to fixed 8TR conditions ##############################
+## Assume there are likely 2 episomes per cluster
 set.seed(400)
+
+## Define parameters of intensity distribution for a single episome
 real_mu <- 525 # based on observed data
 real_sigma2 <- 140^2 # based on observed data
-q <- 230
+q <- 230 # number of measured LANA dots
+
+## sample real number of episomes per cluster
 real_ns <- sample(1:5, q, replace = T, prob = dpois(1:5, 2)/sum(dpois(1:5, 2))) 
 hist(real_ns)
-I <- matrix(rnorm(q, real_mu*real_ns, sqrt(real_sigma2*real_ns)), ncol = q)
+
+## simulate intensity of each cluster 
+I <- matrix(rnorm(q, real_mu*real_ns, sqrt(real_sigma2*real_ns)), ncol = q) 
 names(I) <- paste0("n", 1:q)
 
-# save(real_ns, I, file =  here('results', 'trouble_shooting', 'simulated_data_clustered.RData'))
-# load(here('results', 'trouble_shooting', 'simulated_data_clustered.RData'))
 
+### Apply MCMC #################################################################
+n_iterations <- 10000 # number of iterations for MCMC
 
-# modified_gibbs <- function(tau0, mu0, n_prior, n_param, I, n_iterations){
-#   # print(n_prior)
-#   n_prior <- list(n_prior, n_param)
-#   df <- run_gibbs(tau0, mu0, I, n_iterations, n_prior = n_prior)
-#   print(str_interp("done- tau0: ${tau0} mu0: ${mu0}, ${n_prior}, ${n_param}"))
-#   save(df, file = here("results", "trouble_shooting", str_interp("MCMC_${n_prior}_${n_param}_tau0${tau_0}_mu0${mu0}.RData")))
-#   return(df)
-# }
-
-n_iterations <- 10000
+## Try various initial conditions for MCMC
 hyper_parameters <- expand_grid(tau0 = c(2/real_sigma2, 0.5/real_sigma2), 
                                 mu0 = c(300, 1000)) %>% 
   mutate(chain = 1:nrow(.))
 
-# hyper_parameters <- rbind(
-#   expand_grid(hyper_parameters, n_prior = "geom", n_param = c(0.1, 0.2, 0.3, 0.4, 0.5)),
-#   hyper_parameters %>% mutate(n_prior = "pois", n_param = 1)
-# ) %>% 
-#   arrange(desc(n_prior), n_param)
-# 
-# all_chains <- hyper_parameters %>% head %>% 
-#   select(-chain) %>% 
-#   future_pmap_dfr(modified_gibbs, I = I, n_iterations = n_iterations,
-#                  .options = furrr_options(seed = T), .id = "run")
-
-cat('starting')
+## Apply MCMC with each prior
+cat('starting\n')
+# Poisson
 baseline <- hyper_parameters %>%
   select(-chain) %>%
   future_pmap_dfr(run_gibbs, I,  n_prior = list("pois", 1), n_iterations,
                   .options = furrr_options(seed = T), .id = "chain")
 
-cat('done with baseline\n')
+cat('done with poisson prior\n')
 
 geom0.1 <- hyper_parameters %>%
   select(-chain) %>%
@@ -126,8 +119,7 @@ geom0.6 <- hyper_parameters %>%
 
 cat('done\n')
 
-# save(baseline, geom0.1, geom0.2, geom0.3, geom0.4, geom0.5, geom0.6, file = here('results', 'trouble_shooting', 'chains_for_clustered_sims.RData'))
-# load(here('results', 'trouble_shooting', 'chains_for_clustered_sims.RData'))
+### Plot results ###############################################################
 
 all_runs <- rbind(
   baseline %>% mutate(prior = "poisson(1)"),
@@ -143,19 +135,7 @@ all_runs <- rbind(
 inferred_param <- all_runs %>% group_by(prior) %>% 
   summarise(mu = DescTools::Mode(round(mu)), sigma = DescTools::Mode(round(sqrt(1/tau))))
 
-all_runs %>% 
-  ggplot(aes(iteration, mu, color = chain)) + 
-  geom_line() + 
-  facet_wrap(~prior) + 
-  geom_hline(yintercept = real_mu) + 
-  geom_text(data = data.frame(NA), aes(1100, real_mu, label = real_mu), 
-            hjust = 0, vjust = -0.1, inherit.aes = F) +
-  geom_hline(data = inferred_param, aes(yintercept = mu), lty = "dashed") +
-  geom_text(data = inferred_param, aes(1100, mu, label = mu), 
-            hjust = 0, vjust = -0.1, inherit.aes = F) +
-  ylim(c(0, max(all_runs$mu))) + 
-  labs(y = "mu")
-
+## Trace plots of mu with each prior
 mu_plot <- all_runs %>% 
   filter(!(prior %in% c("geom(0.2)", "geom(0.3)", "poisson(1)"))) %>% 
   ggplot(aes(iteration, mu, color = chain)) + 
@@ -172,35 +152,7 @@ mu_plot <- all_runs %>%
   ylim(c(0, max(all_runs$mu))) + 
   labs(y = bquote(mu), x = "Iteration")
 
-ggsave(here("results", "supplemental_figures_updated_pdf_n_prior", "prior_sensitivity_mu.png"), mu_plot, width = 8, height = 3)
-
-
-all_runs %>% 
-  filter(prior == "geom(0.5)") %>% 
-  mutate(sigma = sqrt(1/tau)) %>% 
-  pull(sigma) %>% sd
-
-all_runs %>% 
-  ggplot(aes(iteration, 1/tau, color = chain)) + 
-  geom_line() + 
-  facet_wrap(~prior) + 
-  geom_hline(yintercept = real_sigma2) + 
-  ylim(c(0, max(1/all_runs$tau))) + 
-  labs(y = "sigma^2")
-
-all_runs %>% 
-  ggplot(aes(iteration, sqrt(1/tau), color = chain)) + 
-  geom_line() + 
-  facet_wrap(~prior) + 
-  geom_hline(yintercept = sqrt(real_sigma2)) + 
-  geom_text(data = data.frame(NA), aes(1100, sqrt(real_sigma2), label = sqrt(real_sigma2)), 
-            hjust = 0, vjust = -0.1, inherit.aes = F) +
-  geom_hline(data = inferred_param, aes(yintercept = sigma), lty = "dashed") +
-  geom_text(data = inferred_param, aes(1100, sigma, label = sigma), 
-            hjust = 0, vjust = -0.1, inherit.aes = F) +
-  ylim(c(0, max(sqrt(1/all_runs$tau)))) + 
-  labs(y = "sigma")
-
+## Trace plots of sigma with each prior
 sigma_plot <- all_runs %>% 
   filter(!(prior %in% c("geom(0.2)", "geom(0.3)", "poisson(1)")))  %>% 
   ggplot(aes(iteration, sqrt(1/tau), color = chain)) + 
@@ -215,7 +167,6 @@ sigma_plot <- all_runs %>%
   ylim(c(0, max(sqrt(1/all_runs$tau)))) + 
   labs(y = bquote(sigma), x = "Iteration")
 
-ggsave(here("results", "supplemental_figures_updated_pdf_n_prior", "prior_sensitivity_sigma.png"), sigma_plot, width = 8, height = 3)
 
 sensitivity_plot <- mu_plot + 
   theme(axis.text.x = element_blank(), axis.title.x = element_blank(), axis.ticks = element_blank()) + 
@@ -223,9 +174,9 @@ sensitivity_plot <- mu_plot +
   theme(strip.background = element_blank(), strip.text = element_blank()) + 
   plot_layout(ncol = 1, guides = "collect")
 
-ggsave(here("results", "supplemental_figures_updated_pdf_n_prior", "prior_sensitivity.png"), sensitivity_plot, width = 8, height = 4.5)
+ggsave(here("results", "supplemental_figures", "prior_sensitivity.png"), sensitivity_plot, width = 8, height = 4.5)
 
-
+### Check convergence heuristics for all cases #################################
 convergence <- all_runs %>% 
   group_split(prior) %>% 
   future_map_dfr(function(x) convergence_results(select(x, -prior)) %>% mutate(prior = unique(x$prior)))
@@ -282,7 +233,7 @@ convergence %>%
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) &
   labs(color = "")
 
-## Compare to simulated datas
+### Compare estimates of episomes per cluster to synthetic data ################
 cluster_modes <- all_runs %>%
   filter(chain == "1") %>% 
   select(-mu, -tau, -iteration, -chain) %>% 
@@ -339,15 +290,15 @@ tibble(intensity = I[1,], cluster_id = names(I)) %>%
 
 
 
-#####
-# Simulate another dataset with larger variance
+### Repeat analysis with greater variance in simulated data ####################
+
+## Simulate data
 set.seed(400)
-real_sigma2 <- 350^2 # based on observed data
+real_sigma2 <- 350^2 
 I_lv <- matrix(rnorm(q, real_mu*real_ns, sqrt(real_sigma2*real_ns)), ncol = q)
 names(I_lv) <- paste0("n", 1:q)
 
-# save(real_ns, I_lv, file =  here('results', 'trouble_shooting', 'simulated_data_clustered_larger_variance.RData'))
-
+## Apply MCMC
 cat('starting\n')
 baseline_lv <- hyper_parameters %>%
   select(-chain) %>%
@@ -398,8 +349,7 @@ geom0.6_lv <- hyper_parameters %>%
 
 cat('done\n')
 
-# save(baseline_lv, geom0.1_lv, geom0.2_lv, geom0.3_lv, geom0.4_lv, geom0.5_lv, geom0.6_lv, file = here('results', 'trouble_shooting', 'chains_for_clustered_sims_larger_variance.RData'))
-
+## Plot results
 all_runs_lv <- rbind(
   baseline_lv %>% mutate(prior = "poisson(1)"),
   geom0.1_lv %>% mutate(prior = "geom(0.1)"),
@@ -607,43 +557,5 @@ rbind(
   theme_bw()
   
 
-#####
-# Make silhouette plots
-make_sil <- function(I, n_prior, modes){
-  dist_matrix <- dist(t(I))  
-  class <- modes %>% 
-    filter(prior == n_prior) %>% 
-    group_by(cluster_id) %>% 
-    filter(n_epi == min(n_epi)) %>% 
-    ungroup %>% 
-    mutate(cluster = as.numeric(gsub("n", "", cluster_id))) %>% 
-    arrange(cluster) %>% 
-    pull(n_epi)
-  sil <- silhouette(class, dist_matrix)
-  fviz_silhouette(sil)
-}
-
-make_sil(I, "geom(0.1)", cluster_modes)
-make_sil(I, "geom(0.2)", cluster_modes)
-make_sil(I, "geom(0.3)", cluster_modes)
-make_sil(I, "geom(0.4)", cluster_modes)
-make_sil(I, "geom(0.5)", cluster_modes) + 
-  coord_flip() + theme(axis.text.y = element_blank(), axis.text.x = element_text())
-make_sil(I, "geom(0.6)", cluster_modes)
-make_sil(I, "poisson(1)", cluster_modes)
-
-
-make_sil(I_lv, "geom(0.1)", cluster_modes_lv)
-make_sil(I_lv, "geom(0.2)", cluster_modes_lv)
-make_sil(I_lv, "geom(0.3)", cluster_modes_lv)
-make_sil(I_lv, "geom(0.4)", cluster_modes_lv)
-make_sil(I_lv, "geom(0.5)", cluster_modes_lv)
-make_sil(I_lv, "geom(0.6)", cluster_modes_lv)
-make_sil(I_lv, "poisson(1)", cluster_modes_lv)
-
-hist(real_ns, freq = F)
-points(1:5, dgeom(1:5, 0.5)/sum(dgeom(1:100, 0.5)), col = "red")
-points(1:5, dgeom(1:5, 0.6)/sum(dgeom(1:100, 0.6)), col = "blue")
-points(1:5, dgeom(1:5, 0.4)/sum(dgeom(1:100, 0.4)), col = "green")
 
 

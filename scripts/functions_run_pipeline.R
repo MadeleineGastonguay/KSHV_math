@@ -29,15 +29,15 @@ select <- dplyr::select
 options(dplyr.summarise.inform = FALSE)
 
 ## Color-blind friendly color palette
-  safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", 
-                               "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888")
+safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", 
+                             "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888")
 
 #####
 # Function to read in data
 #####
 
 load_data <- function(mother_cell_file, daughter_cell_file){
-    
+  
   # Daughter cell data
   daughter_cell_data <- readxl::read_excel(here("data", "derived", daughter_cell_file))
   # Mother cell data
@@ -68,7 +68,6 @@ load_data <- function(mother_cell_file, daughter_cell_file){
 
 #####
 # Function to run statistical inference framework
-#####
 
 
 run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder, 
@@ -397,7 +396,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
 }
 
 #####
-# Function to generate figures
+# Function to make diagnostic plots from pipeline output
 #####
 
 make_plots <- function(pipeline_output, daughter_cell_data, mother_cell_data, results_folder){
@@ -802,98 +801,8 @@ make_plots <- function(pipeline_output, daughter_cell_data, mother_cell_data, re
 }
 
 #####
-# Function for figure plots
+# Function to make figure for main text
 #####
-
-fancy_figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples, results_folder){
-  
-  
-  # Compare number of episomes per mother cells to total number of episomes in daughter cells
-  temp_df <- daughter_cell_samples %>%
-    filter(chain == "chain1") %>%
-    pivot_longer(!c(chain, iteration), names_to = "cell_id", values_to = "n_episomes") %>% 
-    separate(cell_id, into = c("mother_cell_id", "daughter"), sep = "_") %>% 
-    pivot_wider(names_from = "daughter", values_from = "n_episomes", values_fill = 0) %>% 
-    count(mother_cell_id, `1`, `2`) %>% 
-    group_by(mother_cell_id) %>% 
-    mutate(p = n/sum(n)) %>% 
-    filter(n == max(n)) %>% 
-    select(-n) %>% 
-    # ungroup %>% 
-    # group_by(mother_cell_id) %>%
-    pivot_longer(c(`1`, `2`), values_to = "n_episomes") %>% 
-    summarise(X1 = max(n_episomes), X2 = ifelse(n() > 1, min(n_episomes), 0), total = sum(n_episomes), p = unique(p)) %>%
-    mutate(pair = paste0("(", X1, ",", X2, ")")) 
-  
-  pair_levels <- temp_df %>% count(pair) %>% arrange(desc(n)) %>% pull(pair)
-  if(length(pair_levels) > 10){
-    pair_labels <- c(pair_levels[1:10], rep("other", length(pair_levels)-10))  
-  }else{
-    pair_labels <- pair_levels
-  }
-  
-  
-  
-  intensity_scatter <- daughter_cell_data %>% 
-    group_by(mother_cell_id, cell_id, daughter_cell) %>% 
-    summarise(total_intensity = sum(total_cluster_intensity)) %>% 
-    group_by(mother_cell_id) %>% 
-    summarise(daughter_1 = max(total_intensity), daughter_2= ifelse(n() > 1, min(total_intensity), 0)) %>% 
-    left_join(temp_df, by = "mother_cell_id") %>% 
-    mutate(pair = replace_na(pair, "other"),
-           pair = factor(pair, levels = pair_levels, labels = pair_labels)) %>% 
-    ggplot(aes(daughter_1, daughter_2, color = pair, size = p)) + 
-    geom_abline(color = "gray", lty = "dashed") + 
-    geom_point() + 
-    labs(x = "Total intensity of daughter cell with more LANA dots",
-         y = "Total intensity of daughter cell with fewer LANA dots") + 
-    tune::coord_obs_pred() + 
-    scale_color_manual(values = c(safe_colorblind_palette[2:12], rep("gray", 10) ))
-  # theme(legend.position = "none")
-  
-  # ggsave(here(results_folder, "intensity_scatter_plot.png"), intensity_scatter, width = 5, height = 5)
-  
-  intensity_distribution <- mother_cell_data %>%
-    group_by(cell_id) %>% summarise(total_cluster_intensity = sum(total_cluster_intensity)) %>%
-    ggplot(aes(total_cluster_intensity, y = after_stat(count / sum(count)))) +
-    geom_histogram(aes(fill = "non-dividing cells", color = "non-dividing cells"), alpha = 0.5) +
-    geom_histogram(data = daughter_cell_data %>% group_by(mother_cell_id) %>%
-                     mutate(int = sum(total_cluster_intensity)),
-                   aes(int, fill = "daughter cells", color = "daughter cells"), alpha = 0.5) +
-    labs(x = "cluster intensity", fill = "cell set", y= "frequency") +
-    scale_y_continuous(labels = scales::percent) +
-    theme(legend.position = c(1,1), legend.justification = c(1.1,1.1))  +
-    guides(color = "none") +
-    labs(x = "Intensity in cell(s)") +
-    scale_color_manual(values = safe_colorblind_palette) +
-    scale_fill_manual(values = safe_colorblind_palette)
-  
-  # ggsave(here(results_folder, "intensity_distribution_plot.png"), intensity_distribution, width = 5, height = 4)
-  
-  
-  pair_histogram <- temp_df  %>%
-    count(pair, X1, X2) %>%
-    arrange(desc(n)) %>%
-    slice(1:10) %>%
-    arrange(n, desc(X1), desc(X2)) %>% 
-    mutate(pair = fct_inorder(pair)) %>% 
-    ggplot(aes(pair, n, fill = pair)) +
-    geom_bar(stat = "identity") +
-    labs(x = "Number of of episomes in each daughter cell (X1, X2)",
-         y = "Number of daughter\ncell pairs") + 
-    scale_fill_manual(values = rev(safe_colorblind_palette[2:11])) +
-    coord_flip() + 
-    theme(legend.position = "none")
-  
-  figure <- intensity_distribution /
-    (intensity_scatter + pair_histogram + 
-       plot_layout(ncol = 2, widths = c(2,1))) + 
-    plot_layout(heights = c(1,1.5))
-  
-  ggsave(here(results_folder, "fancy_figure.png"), figure, width = 10.5, height = 11)
-  
-  
-}
 
 figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples, results_folder){
   
@@ -917,11 +826,19 @@ figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples,
     summarise(X1 = max(n_episomes), X2 = ifelse(n() > 1, min(n_episomes), 0), total = sum(n_episomes), p = unique(p)) %>%
     mutate(pair = paste0("(", X1, ",", X2, ")")) 
   
-  print(temp_df %>% count(X1 == X2))
+  cat("Percent of daughter cell pairs with equal episomes per cell:\n")
+  print(temp_df %>% count(X1 == X2) %>% mutate(p= n/sum(n)))
   
   pair_levels <- temp_df %>% count(pair) %>% arrange(desc(n)) %>% pull(pair)
+  multiple_obs <- temp_df %>% count(pair) %>% filter(n > 1) %>% arrange(desc(n)) %>% pull(pair)
   if(length(pair_levels) > 10){
-    pair_labels <- c(pair_levels[1:10], rep("other", length(pair_levels)-10))  
+    # pair_labels <- c(multiple_obs[1:10], rep("other", length(pair_levels)-10))  
+    single_obs <- temp_df %>% count(X1, X2) %>% arrange(desc(n)) %>% filter(n == 1) %>% 
+      mutate(label = ifelse(X1 == X2, "other\neven\npairs", "other\nimbalanced\npairs")) %>% 
+      pull(label)
+    
+    pair_labels <- c(multiple_obs, single_obs)
+    
   }else{
     pair_labels <- pair_levels
   }
@@ -956,16 +873,23 @@ figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples,
     scale_fill_manual(values = safe_colorblind_palette) 
   
   
+  summary <- temp_df  %>%
+    count(pair, X1, X2) %>%
+    arrange(desc(n), X1, X2) %>% 
+    mutate(percent_of_daughter_cell_pairs = n/sum(n)*100, even_pair = X1 == X2) %>% 
+    select(pair, even_pair, number_of_daughter_cell_pairs = n, percent_of_daughter_cell_pairs) 
+  
+  write_csv(summary, here(results_folder, "frequency_of_daughter_cell_pair_inference.csv"))
+  
   pair_histogram <- temp_df  %>%
     count(pair, X1, X2) %>%
-    arrange(desc(n)) %>%
-    slice(1:10) %>%
     arrange(desc(n), X1, X2) %>% 
-    mutate(pair = fct_inorder(pair)) %>% 
+    mutate(pair = fct_inorder(factor(pair, levels = pair_levels, labels = pair_labels))) %>% 
     ggplot(aes(pair, n)) +
     geom_bar(stat = "identity") +
     labs(x = "Estimated number of of episomes in daughter cell pairs",
-         y = "Number of occurrences") + 
+         y = "Number of daughter cell pairs") +
+    scale_y_continuous(breaks = seq(0,40, by = 2)) +
     # scale_fill_manual(values = rev(safe_colorblind_palette[2:11])) +
     theme(legend.position = "none")
   

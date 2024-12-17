@@ -1,37 +1,4 @@
-## This script has functions required to simulate episome data, calculate the likelihood, estimate its parameters, and calculate uncertainty
-
-#####
-# Simulation Functions
-#####
-
-# Function to simulate episome data
-sim_one_cell <- function(X0, Pr, Ps, id){
-  # How many episomes replicate?
-  r <- sum(rbinom(X0, 1, Pr))
-  # How many replicated episomes segregate?
-  s <- sum(rbinom(r, 1, Ps))
-  # Assign k replicated pairs to cell 1
-  k <- sum(rbinom(r-s, 1, 0.5))
-  # Assign j singletons to cell 1
-  j <- sum(rbinom(X0-r, 1, 0.5))
-  
-  # Count episomes in cell 1 and cell 2
-  X1 <- s + 2*k + j
-  X2 <- X0 + r - (s + 2*k + j)
-  
-  data.frame(r, s, k, j, X1 = max(X1, X2), X2 = min(X1, X2))
-}
-
-# Function to simulate multiple cells:
-# X0s is a vector of length n_cells with the initial number of episomes. Alternatively, it can be a single value if all cells have the same to start.
-# Pr and Ps are the probability of replication and division, respectively
-# n_cells is the number of cells to simulate
-simulate_multiple_cells <- function(X0s, Pr, Ps, n_cells){
-  if(length(X0s) != n_cells & length(X0s) != 1) stop("Incorect dimension for X0s")
-  
-  data.frame(X0 = X0s, Pr, Ps, id = 1:n_cells) %>% 
-    bind_cols(pmap_df(., sim_one_cell))
-}
+## This script has functions required to calculate the likelihood, estimate its parameters, and calculate uncertainty
 
 #####
 # Likelihood function
@@ -60,11 +27,6 @@ likelihood <- function(X1, X2, X0, Pr, Ps){
 likelihood_Pr <- function(X1, X2, X0, Pr, Ps = NA){
   R = X1 + X2 - X0
   # Portion of likelihood that isn't in summation
-  # if(R > X0 | R < 0){
-  #   L = 0
-  # }else{
-  #   L = choose(X0, R)*Pr^R*(1-Pr)^(X0-R)
-  # }
   L = dbinom(R, X0, Pr)
   return(c("likelihood" = L))
 }
@@ -114,44 +76,7 @@ calculate_maximum_likelihood <- function(data, Pr_values, Ps_values){
     ungroup()
   
 }
-# calculate_maximum_likelihood <- function(data, Pr_values, Ps_values){
-#   
-#   # Define grid of parameter combinations to test
-#   parameter_grid <- expand_grid(Pr = Pr_values, Ps = Ps_values)
-#   
-#   # Function to calculate likelihood for a given observed data
-#   get_likelihood <- function(data, parameter_grid){
-#     # Set up a dataframe of likelihoods to calculate
-#     # Note that we only calculate the likelihood of the observed data once given each Pr and Ps since all observations in this "chunk" are the same
-#     parameter_grid <- expand_grid(parameter_grid, data %>% distinct(X0, X1, X2))
-#     
-#     likelihoods <- parameter_grid %>% 
-#       # Calculate likelihood at each parameter combination
-#       bind_cols(pmap_df(., likelihood)) %>% 
-#       group_by(Pr, Ps) %>% 
-#       # Calculate the log likelihood, multiplying by the number of observations with the same data to get the likelihood of observing all of them
-#       mutate(log_likelihood = log(likelihood)*nrow(data)) %>% 
-#       ungroup
-#     likelihoods  
-#   }
-#   
-#   # Nest the data frame to observations with the same values
-#   data %>%
-#     # make sure X1 is larger number of episomes
-#     mutate(temp_X1 = ifelse(X1 > X2, X1, X2), temp_X2 = ifelse(X1 > X2, X2, X1)) %>% 
-#     select(-X1, -X2) %>% 
-#     rename(X1 = temp_X1, X2 = temp_X2) %>% 
-#     mutate(outcome = paste(X1, X2, sep = "_")) %>% 
-#     nest(data = c(X0, X1, X2, id)) %>% 
-#     # For each set of observed data, calculate the likelihood at all combinations of Pr and Ps
-#     mutate(l = map(data, get_likelihood, parameter_grid)) %>%  pull(l) %>% 
-#     # Pull together the results for each observed value
-#     bind_rows %>% group_by(Pr, Ps) %>% 
-#     # Add up log likelihoods to get likelihood of observing all the data given Pr and Ps
-#     summarise(log_likelihood = sum(log_likelihood)) %>% 
-#     ungroup()
-#   
-# }
+
 
 # Function to find the parameters Pr and Ps that maximize the likelihood of the observed data, given a PMF for X0
 calculate_maximum_likelihood_unknownX0 <- function(data, Pr_values, Ps_values, lambda, just_Pr = F){
@@ -504,36 +429,5 @@ convergence_results <- function(all_chains){
 }
 
 
-######
-# Silhouette Plots
-######
 
-# Calculate silhouette statistic
-calc_sil <- function(intensity_data, all_chains, method = "euclidean"){
-  nk <- all_chains %>% 
-    filter(chain == "chain1") %>% 
-    pivot_longer(grep("[0-9]", names(all_chains), perl = T), names_to = "cluster_id", values_to = "n_epi") %>% 
-    # pivot_longer(-c(chain, iteration, tau, mu), names_to = "cluster_id", values_to = "n_epi") %>% 
-    count(cluster_id, n_epi) %>% 
-    group_by(cluster_id) %>% 
-    filter(n == max(n)) %>% 
-    ungroup
-  
-  dat <- left_join(intensity_data, nk, by = "cluster_id")
-  I <- intensity_data$total_cluster_intensity
-  names(I) <- intensity_data$cluster_id
-  dist_matrix <- dist(I, method = method)  
-  class <- dat$n_epi
-  names(class) <- intensity_data$cluster_id
-  silhouette(class, dist_matrix)
-}
-
-# # propagate uncertainty via 100 samples of the posterior distribution
-# sample_sil <- function(df, intensity_data){
-#   nks <- df %>% pivot_longer(-c(iteration, mu, tau, chain), names_to = "cluster_id", values_to = "n_epi") 
-#   as.data.frame(calc_sil(intensity_data, nks)) %>% mutate(id = 1:nrow(.))
-# }
-# Figure2_sil <- Figure2_results$all_chains %>% filter(chain == "chain1") %>% sample_n(100) %>%
-#   group_split(iteration) %>%
-#   map_df(sample_sil, .id = "sample", intensity_data = intensity_data)
 

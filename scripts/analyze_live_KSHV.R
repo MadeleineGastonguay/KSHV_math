@@ -1,27 +1,24 @@
-# This script runs the full pipeline for data from fixed images of cells with only KHSV terminal repeats (Figure 2)
+# This script runs the full pipeline for data from images of live cells with 
+# full KSHV (figure 6)
 
-#####
-#  Setup 
-#####
+### Setup ###################################################################### 
 
 # load libraries 
 library(tidyverse)
 library(here)
+library(patchwork)
 
 theme_set(theme_bw())
 
 # Check wd
 here()
+setwd(here())
 
 # Read in helper functions 
 source(here("scripts", "functions_inference.R"))
 source(here("scripts", "functions_run_pipeline.R"))
 
-set.seed(1234)
-
-
-#####
-# Script inputs
+### Script inputs ##############################################################
 
 # Folder for results
 results_folder <- here("results", "live_KSHV")
@@ -32,23 +29,31 @@ daughter_cell_file <- "live_KSHV_dividing_cells.xlsx"
 # Mother cell intensity data
 mother_cell_file <- "live_KSHV_non_dividing_cells.xlsx"
 
-#####
+### Run analysis ###############################################################
 
+# Load in the data
 live_KSHV_data <- load_data(mother_cell_file, daughter_cell_file)
 
 daughter_cell_data <- live_KSHV_data$daughter_cell_data
 mother_cell_data <- live_KSHV_data$mother_cell_data
 
+cat(length(unique(daughter_cell_data$mother_cell_id)), "daughter cell pairs with", nrow(daughter_cell_data), "clusters\n")
+cat(length(unique(mother_cell_data$cell_id)), "non-dividing cells with", nrow(mother_cell_data), "clusters")
+
+# Estimate number of episomes per cell and Replication and Segregation Efficiency
 live_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder, same_mu = F,
                                 n_prior = list("geom", 0.5), parallel = T)
 
 
-live_KSHV_results$MLE_grid$estimates
+### Estimates of Replication and Segregation Efficiency ########################
 
+# The ranges in this table are for joint 95% confidence intervals:
+estimates <- live_KSHV_results$MLE_grid$estimates %>%  
+  pivot_longer(everything(), names_sep = "_", names_to = c("metric", "parameter"))
 
-## Adjust confidence intervals to be marginal:
-
-live_KSHV_results$MLE_grid$grid_search %>%
+# Calculate marginal confidence intervals (reported in paper):
+# Pr
+Pr_marginal <- live_KSHV_results$MLE_grid$grid_search %>%
   group_by(Pr) %>%
   summarise(probability = sum(probability)) %>% 
   arrange(desc(probability)) %>% 
@@ -56,7 +61,8 @@ live_KSHV_results$MLE_grid$grid_search %>%
   filter(cum_sum <= 0.95) %>% 
   pull(Pr) %>% range
 
-live_KSHV_results$MLE_grid$grid_search %>%
+# Ps
+Ps_marginal <- live_KSHV_results$MLE_grid$grid_search %>%
   group_by(Ps) %>%
   summarise(probability = sum(probability)) %>% 
   arrange(desc(probability)) %>% 
@@ -64,47 +70,27 @@ live_KSHV_results$MLE_grid$grid_search %>%
   filter(cum_sum <= 0.95) %>% 
   pull(Ps) %>% range
 
+# Write out estimates
+estimates_full <- estimates %>% 
+  filter(metric == "MLE") %>% 
+  select(parameter, MLE = value) %>%
+  mutate(
+    joint_CI = estimates %>% filter(metric != "MLE") %>%  
+      group_by(parameter) %>% 
+      summarise(joint_CI = paste0("(",paste(value, collapse = ", "), ")")) %>% 
+      pull(joint_CI),
+    
+    marginal_CI = c(paste0("(", paste(Pr_marginal, collapse = ","), ")"),
+                    paste0("(", paste(Ps_marginal, collapse = ","), ")"))
+    ) 
+  
+write_csv(estimates_full, here(results_folder, "MLE_parameter_estimates.csv"))
+
+### Make exploratory plots and paper figures ###################################
 make_plots(live_KSHV_results, daughter_cell_data, mother_cell_data, results_folder)
 
 daughter_cell_samples <- live_KSHV_results$daughter_cell_samples
 figures <- figures(daughter_cell_data, mother_cell_data, daughter_cell_samples, results_folder)
-
-## How many cases did we infer fewer episomes than observed visually?
-live_KSHV_results$all_chains %>% 
-  pivot_longer(!c(chain, iteration, mu_d, tau_d, mu_m, tau_m), names_to = "cluster_id", values_to = "n_epi") %>% 
-  count(cluster_id, n_epi) %>% 
-  group_by(cluster_id) %>% 
-  filter(n == max(n)) %>% 
-  ungroup() %>% 
-  left_join(rbind(select(live_KSHV_data$daughter_cell_data, cluster_id, min_episome_in_cluster),
-                  select(live_KSHV_data$mother_cell_data, cluster_id, min_episome_in_cluster))
-  ) %>% 
-  count(n_epi < min_episome_in_cluster)
-
-
-
-## Mean values of intensity per cell and number of episomes per cell
-live_KSHV_results$daughter_cell_samples %>% 
-  filter(chain == "chain1") %>% 
-  select(-c(chain, iteration)) %>% 
-  as.matrix %>% 
-  mean
-
-live_KSHV_results$mother_cell_samples %>% 
-  filter(chain == "chain1") %>% 
-  select(-c(chain, iteration)) %>% 
-  as.matrix %>% 
-  mean
-
-live_KSHV_data$daughter_cell_data %>% 
-  group_by(cell_id) %>% 
-  summarise(intensity = sum(total_cluster_intensity)) %>% 
-  pull(intensity) %>% mean
-
-live_KSHV_data$mother_cell_data %>% 
-  group_by(cell_id) %>% 
-  summarise(intensity = sum(total_cluster_intensity)) %>% 
-  pull(intensity) %>% mean
 
 ## Show inference results for example images:
 # 16, 14
@@ -131,10 +117,65 @@ example_inference <- live_KSHV_results$daughter_cell_samples %>%
 ggsave(here(results_folder, "example_inference.png"), width = 1.5, height = 5)
 
 
-## Get standard deviation of inferred mean and sigma:
-live_KSHV_results$all_chains %>% 
+### Post-hoc descriptive statistics ############################################
+
+# Estimates of mu and sigma from MCMC
+MCMC_summary <- live_KSHV_results$all_chains %>% 
   filter(chain == "chain1") %>% 
-  select(mu_d, tau_d, mu_m, tau_m) %>% 
-  mutate(sd_d = sqrt(1/tau_d), sd_m = sqrt(1/tau_m)) %>% 
-  apply(2, sd)
+  summarise(mu_d_mean = mean(mu_d), mu_d_sd = sd(mu_d),
+            sigma_d_mean = mean(sqrt(1/tau_d)), sigma_d_sd = sd(sqrt(1/tau_d)),
+            mu_m_mean = mean(mu_m), mu_m_sd = sd(mu_m),
+            sigma_m_mean = mean(sqrt(1/tau_m)), sigma_m_sd = sd(sqrt(1/tau_m))) %>% 
+  mutate(n_daughter_pairs = length(unique(daughter_cell_data$mother_cell_id)),
+         n_LANA_dots_d = nrow(daughter_cell_data),
+         n_LANA_dots_m = nrow(mother_cell_data))
+
+write_csv(MCMC_summary, here(results_folder, "MCMC_summary.csv"))
+
+
+# We never infer fewer episomes than observed visually
+live_KSHV_results$all_chains %>% 
+  pivot_longer(!c(chain, iteration, mu_d, tau_d, mu_m, tau_m), names_to = "cluster_id", values_to = "n_epi") %>% 
+  count(cluster_id, n_epi) %>% 
+  group_by(cluster_id) %>% 
+  filter(n == max(n)) %>% 
+  ungroup() %>% 
+  left_join(rbind(select(live_KSHV_data$daughter_cell_data, cluster_id, min_episome_in_cluster),
+                  select(live_KSHV_data$mother_cell_data, cluster_id, min_episome_in_cluster))
+  ) %>% 
+  count(n_epi < min_episome_in_cluster)
+
+
+# Mean values of intensity per cell and number of episomes per cell
+mean_intensity_inference <- tibble(
+  
+  mean_inferred_epi.daughter = live_KSHV_results$daughter_cell_samples %>% 
+    filter(chain == "chain1") %>% 
+    select(-c(chain, iteration)) %>% 
+    as.matrix %>% 
+    mean,
+  
+  mean_inferred_epi.mother = live_KSHV_results$mother_cell_samples %>% 
+    filter(chain == "chain1") %>% 
+    select(-c(chain, iteration)) %>% 
+    as.matrix %>% 
+    mean,
+  
+  mean_intensity.daughter = live_KSHV_data$daughter_cell_data %>% 
+    group_by(cell_id) %>% 
+    summarise(intensity = sum(total_cluster_intensity)) %>% 
+    pull(intensity) %>% mean,
+  
+  mean_intensity.mother = live_KSHV_data$mother_cell_data %>% 
+    group_by(cell_id) %>% 
+    summarise(intensity = sum(total_cluster_intensity)) %>% 
+    pull(intensity) %>% mean
+  
+) %>% 
+  pivot_longer(everything(), names_sep = "[.]", names_to = c("observation", "set")) %>% 
+  pivot_wider(names_from = observation)
+
+write_csv(mean_intensity_inference, here(results_folder, "mean_epi_per_cell.csv") )
+
+
 
