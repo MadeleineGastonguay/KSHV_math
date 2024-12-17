@@ -36,10 +36,12 @@ Supplemental figures S4, S5, and S14 are generated with the **generate_supplemen
 
 ## Simulations
 
-Simulations for three cell-growth scenarios can be run with the following scripts: 
+Simulations for four cell-growth scenarios can be run with the following scripts: 
 
 - **simulate_constant.R** simulates a constant-sized cell population without selection 
   - Figures 7, S8, S9, S10
+- **simulate_constant_selection.R** simulates a constant-sized cell population under selection
+  - Results not included in manuscript
 - **simulate_expo_selection.R** simulates an exponentially-growing cell population of immortal cells under selection
   - Figure 8
 - **simulate_PEL_growth.R** simulates a KSHV-dependent tumor under therapy that reduces replication or segregation efficiency

@@ -1,4 +1,5 @@
 ## This script runs and plots simulations of a cell population with constant size
+# Cells with 0 episomes die immediately
 
 library(tidyverse)
 library(here)
