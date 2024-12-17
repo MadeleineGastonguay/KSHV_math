@@ -3,5 +3,7 @@
 .RData
 .Ruserdata
 .DS_Store
-results/*.RData
-results/*.csv
+*.RData
+*.csv
+!data
+results/simulations_constant_selection/*
