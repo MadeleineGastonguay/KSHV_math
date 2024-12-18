@@ -122,10 +122,10 @@ ggsave(here(results_folder, "example_inference.png"), width = 1.5, height = 5)
 # Estimates of mu and sigma from MCMC
 MCMC_summary <- live_KSHV_results$all_chains %>% 
   filter(chain == "chain1") %>% 
-  summarise(mu_d_mean = mean(mu_d), mu_d_sd = sd(mu_d),
-            sigma_d_mean = mean(sqrt(1/tau_d)), sigma_d_sd = sd(sqrt(1/tau_d)),
-            mu_m_mean = mean(mu_m), mu_m_sd = sd(mu_m),
-            sigma_m_mean = mean(sqrt(1/tau_m)), sigma_m_sd = sd(sqrt(1/tau_m))) %>% 
+  summarise(mu_d_mean = DescTools::Mode(round(mu_d)), mu_d_sd = sd(mu_d),
+            sigma_d_mean = DescTools::Mode(round(sqrt(1/tau_d))), sigma_d_sd = sd(sqrt(1/tau_d)),
+            mu_m_mean = DescTools::Mode(round(mu_m)), mu_m_sd = sd(mu_m),
+            sigma_m_mean = DescTools::Mode(round(sqrt(1/tau_m))), sigma_m_sd = sd(sqrt(1/tau_m))) %>% 
   mutate(n_daughter_pairs = length(unique(daughter_cell_data$mother_cell_id)),
          n_LANA_dots_d = nrow(daughter_cell_data),
          n_LANA_dots_m = nrow(mother_cell_data))

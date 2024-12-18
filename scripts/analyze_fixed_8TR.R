@@ -119,8 +119,8 @@ ggsave(here(results_folder, "example_inference.png"), width = 5, height = 1.2)
 # Estimates of mu and sigma from MCMC
 MCMC_summary <- fixed_8TR_results$all_chains %>% 
   filter(chain == "chain1") %>% 
-  summarise(mu_mean = mean(mu), mu_sd = sd(mu),
-            sigma_mean = mean(sqrt(1/tau)), sigma_sd = sd(sqrt(1/tau))) %>% 
+  summarise(mu_mean = DescTools::Mode(round(mu)), mu_sd = sd(mu),
+            sigma_mean = DescTools::Mode(round(sqrt(1/tau))), sigma_sd = sd(sqrt(1/tau))) %>% 
   mutate(n_daughter_pairs = length(unique(daughter_cell_data$mother_cell_id)),
          n_LANA_dots = nrow(mother_cell_data)+nrow(daughter_cell_data))
 
