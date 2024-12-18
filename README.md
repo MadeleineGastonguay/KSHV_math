@@ -25,10 +25,10 @@ and find ML estimates of replication and segregation efficiencies
 to implement Gibbs sampling, compute likelihoods, and quantify uncertainty. The main functions are:
 
 - `likelihood()` Computes the likelihood of observing an observed daughter cell pair given $X_0$, $P_r$, and $P_s$
-- `calculate_maximum_likelihood_unknownX0()` runs a grid search to find the maximum likelihood estimates of Pr and Ps marginalized over values of X0
+- `calculate_maximum_likelihood_unknownX0()` runs a grid search to find the maximum likelihood estimates of Pr and Ps marginalized over values of $X_0$
 - `calculate_CI()` calculates the joint 95% confidence interval based on the results of `calculate_maximum_likelihood_unknownX0()`
 - `run_grid_search()` combines the prior two functions and plots the results of the grid search
-- `run_gibbs()` implements Gibbs sampling to estimate the number of episomes per cell
+- `run_gibbs()` implements Gibbs sampling to estimate the number of episomes per LANA dot
 - `convergence_results()` calculate convergence heuristics for Gibbs sampling
 
 Supplemental figures S4, S5, and S14 are generated with the **generate_supplemental_figures.R** script.
