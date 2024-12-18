@@ -76,124 +76,185 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
                          just_Pr = F){
   
   
-  # Make results folder
-  if(!file.exists(results_folder)) dir.create(results_folder, showWarnings = F)
+  # Create the results folder if it does not already exist
+  if(!dir.exists(results_folder)) dir.create(results_folder, showWarnings = F)
   
   #####
-  # Gibbs sampling to infer the number of episomes per cluster in each daughter cell
+  # Step 1: Gibbs Sampling
+  # Use Gibbs sampling to infer the number of episomes per cluster in each daughter cell.
   #####
   
-  #  set initial conditions:
-  # We will assume that the value of mu is bounded between the ranges observed in the data. 
-  # Thus, we will select initial conditions within this range. We will only try one value of tau that is small enough 
-  # (meaning sigma is large enough) that the chain will converge based on chains run in simulated data. 
-  # We will determine the initial conditions for nk based on the observed data and the initial condition for mu.
+  ## Set initial conditions:
+  
+  # Set the initial value for tau, which represents precision (inverse variance)
+  # Chosen so that variance will be large enough that the chain will converge
   tau0 <- 1e-5 
+  
+  # Below, we will select initial conditions for mu within the range of observed intensities.
+  # Below, we will determine the initial conditions for nk based on the observed data and the initial condition for mu.
+  
   # Combine intensity data for both mother cells and daughter cells
-  intensity_data <- rbind(daughter_cell_data %>% select(cell_id, cluster_id, total_cluster_intensity, min_episome_in_cluster) %>% mutate(set = "daughter"), 
-                          mother_cell_data  %>% select(cell_id, cluster_id, total_cluster_intensity, min_episome_in_cluster) %>% mutate(set = "mother"))
+  intensity_data <- rbind(
+    daughter_cell_data %>% 
+      select(cell_id, cluster_id, total_cluster_intensity, min_episome_in_cluster) %>% 
+      mutate(set = "daughter"), 
+    mother_cell_data  %>% 
+      select(cell_id, cluster_id, total_cluster_intensity, min_episome_in_cluster) %>% 
+      mutate(set = "mother")
+  )
   
-  
+  # Define the file path for saving/loading MCMC samples
   file <- here(results_folder, "MCMC_samples_per_cluster.RData")
   if(file.exists(file) & !overwrite){
+    # If samples exist and overwriting is not allowed, load them
     load(file)
   }else{
-    if(same_mu){
+    # Determine initial conditions of mu and nk
+    if(same_mu){ # If the mean intensity is expected to be the same in mother and daughter cells
+      # Calculate initial guesses for mu based on observed intensity ratios.
       ICs <- intensity_data %>% 
-        mutate(ratio = total_cluster_intensity/min_episome_in_cluster) %>% filter(!is.na(ratio)) %>% pull(ratio) %>% summary
+        mutate(
+          ratio = total_cluster_intensity/min_episome_in_cluster) %>% filter(!is.na(ratio)
+          ) %>% 
+        pull(ratio) %>% 
+        summary
+      # Use the median and upper quartile as initial values
       mu0 <- ICs[c(2,5)]
       
-      cat("\nRunning Gibbs with the following parameters", 
-          "\ntau0:", tau0, "\nmu0:", mu0, 
-          "\nnumber_of_iterations:", n_iterations,
-          "\nn_clusters:", nrow(intensity_data),
-          "\n===")
+      cat(
+        "\nRunning Gibbs with the following parameters", 
+        "\ntau0:", tau0, "\nmu0:", mu0, 
+        "\nnumber_of_iterations:", n_iterations,
+        "\nn_clusters:", nrow(intensity_data),
+        "\n==="
+      )
       
-      # Case when the mean intensity of a single episome is the same for mother and daughter cells
-      # run 2 chains
+      # Run Gibbs sampling with 2 chains
       intensities <- intensity_data$total_cluster_intensity
       names(intensities) <- intensity_data$cluster_id
       chain1 <- run_gibbs(tau0, mu0[1], intensities, n_iterations, n_prior = n_prior)
       chain2 <- run_gibbs(tau0, mu0[2], intensities, n_iterations, n_prior = n_prior)
-    }else{
-      # Case when the mean intensity differs between mother and daughter cells
-      cat("\nRunning Gibbs separately for mother and daughter cells")
-      ICs <- daughter_cell_data %>% 
-        mutate(ratio = total_cluster_intensity/min_episome_in_cluster) %>% filter(!is.na(ratio)) %>% pull(ratio) %>% summary
-      mu0 <- ICs[c(2,5)]
-      cat("\nDaughter cell parameters:", 
-          "\ntau0:", tau0, "\nmu0:", mu0, 
-          "\nnumber_of_iterations:", n_iterations,
-          "\nn_clusters:", nrow(daughter_cell_data),
-          "\n===")
       
-      # start with daughters
+    }else{ # If the mean intensity differs between mother and daughter cells
+      
+      cat("\nRunning Gibbs separately for mother and daughter cells")
+      
+      ## Run Gibbs on the daughter cells
+      
+      # Calculate initial guesses for mu based on observed intensity ratios.
+      ICs <- daughter_cell_data %>% 
+        mutate(ratio = total_cluster_intensity/min_episome_in_cluster) %>% 
+        filter(!is.na(ratio)) %>% 
+        pull(ratio) %>% 
+        summary
+      
+      # Use the median and upper quartile as initial values
+      mu0 <- ICs[c(2,5)]
+      
+      cat(
+        "\nDaughter cell parameters:", 
+        "\ntau0:", tau0, "\nmu0:", mu0, 
+        "\nnumber_of_iterations:", n_iterations,
+        "\nn_clusters:", nrow(daughter_cell_data),
+        "\n==="
+      )
+      
+      # Run Gibbs sampling with 2 chains
       intensities <- daughter_cell_data$total_cluster_intensity
       names(intensities) <- daughter_cell_data$cluster_id
       chain1_d <- run_gibbs(tau0, mu0[1], intensities, n_iterations, n_prior = n_prior)
       chain2_d <- run_gibbs(tau0, mu0[2], intensities, n_iterations, n_prior = n_prior)
       
+      ## Run Gibbs on the mother cells
+      
+      # Calculate initial guesses for mu based on observed intensity ratios.
       ICs <- mother_cell_data %>% 
         mutate(ratio = total_cluster_intensity/min_episome_in_cluster) %>% filter(!is.na(ratio)) %>% pull(ratio) %>% summary
-      mu0 <- ICs[c(2,5)]
-      cat("\nMother cell parameters:", 
-          "\ntau0:", tau0, "\nmu0:", mu0, 
-          "\nnumber_of_iterations:", n_iterations,
-          "\nn_clusters:", nrow(mother_cell_data),
-          "\n===")
       
-      # start with daughters
+      # Use the median and upper quartile as initial values
+      mu0 <- ICs[c(2,5)]
+      
+      
+      cat(
+        "\nMother cell parameters:", 
+        "\ntau0:", tau0, "\nmu0:", mu0, 
+        "\nnumber_of_iterations:", n_iterations,
+        "\nn_clusters:", nrow(mother_cell_data),
+        "\n==="
+      )
+      
+      # Run Gibbs sampling with two chains
       intensities <- mother_cell_data$total_cluster_intensity
       names(intensities) <- mother_cell_data$cluster_id
       chain1_m <- run_gibbs(tau0, mu0[1], intensities, n_iterations, n_prior = n_prior)
       chain2_m <- run_gibbs(tau0, mu0[2], intensities, n_iterations, n_prior = n_prior)
       
+      # Combine results of mother and daughter cells into one dataf rame
       chain1 <- merge(chain1_d, chain1_m, by = "iteration", suffixes = c("_d", "_m"))
       chain2 <- merge(chain2_d, chain2_m, by = "iteration", suffixes = c("_d", "_m"))
     }
     
-    
+    # Save the sampled chains for later use
     save(chain1, chain2, file = file)
   }
   
-  # combine all chains together and remove burn-in period
+  # Combine all chains, removing the burn-in period
   all_chains <- rbind(chain1, chain2) %>%
     mutate(chain = as.factor(rep(c("chain1", "chain2"), each = n_iterations)))  %>%
     filter(iteration > burn_in)
   
   # Find inferred value of mu and sigma based off of the mode of their joint posterior
   if(same_mu){
-    inferred_mu <- median(all_chains$mu)
-    inferred_sigma2 <- median(1/all_chains$tau)
-    inferred_sigma <- median(sqrt(1/all_chains$tau))
+    inferred_mu <- DescTools::Mode(round(all_chains$mu))
+    inferred_sigma2 <-  DescTools::Mode(round(1/all_chains$tau))
+    inferred_sigma <- DescTools::Mode(round(sqrt(1/all_chains$tau)))
     
-    cat("\nResults of Gibbs", '\nmean:', inferred_mu, '\nvariance:', inferred_sigma2, '\nstandard deviation:', inferred_sigma,
-        "\n===")
+    cat(
+      "\nResults of Gibbs", 
+      '\nmean:', inferred_mu, 
+      '\nvariance:', inferred_sigma2, 
+      '\nstandard deviation:', 
+      inferred_sigma,
+      "\n==="
+    )
+    
   }else{
-    inferred_mu <- median(all_chains$mu_d)
-    inferred_sigma2 <- median(1/all_chains$tau_d)
-    inferred_sigma <- median(sqrt(1/all_chains$tau_d))
+    inferred_mu <- DescTools::Mode(round(all_chains$mu_d))
+    inferred_sigma2 <- DescTools::Mode(round(1/all_chains$tau_d))
+    inferred_sigma <- DescTools::Mode(round(sqrt(1/all_chains$tau_d)))
     
-    cat("\nResults of Gibbs in daughter cells", '\nmean:', inferred_mu, '\nvariance:', inferred_sigma2, '\nstandard deviation:', inferred_sigma,
-        "\n===")
+    cat(
+      "\nResults of Gibbs in daughter cells", 
+      '\nmean:', inferred_mu, 
+      '\nvariance:', inferred_sigma2, 
+      '\nstandard deviation:', inferred_sigma,
+        "\n==="
+      )
     
-    inferred_mu <- median(all_chains$mu_m)
-    inferred_sigma2 <- median(1/all_chains$tau_m)
-    inferred_sigma <- median(sqrt(1/all_chains$tau_m))
+    inferred_mu <- DescTools::Mode(round(all_chains$mu_m))
+    inferred_sigma2 <- DescTools::Mode(round(1/all_chains$tau_m))
+    inferred_sigma <- DescTools::Mode(round(sqrt(1/all_chains$tau_m)))
     
-    cat("\nResults of Gibbs in mother cells", '\nmean:', inferred_mu, '\nvariance:', inferred_sigma2, '\nstandard deviation:', inferred_sigma,
-        "\n===")
+    cat(
+      "\nResults of Gibbs in mother cells", 
+      '\nmean:', inferred_mu, 
+      '\nvariance:', inferred_sigma2, 
+      '\nstandard deviation:', inferred_sigma,
+        "\n==="
+      )
   }
   
   
   #####
-  # Get episome per cell at each iteration
+  # Step 2: Episome Count Per Cell
+  # Extract episome counts for each cell from the posterior samples.
   #####
   
   file <- here(results_folder, "MCMC_samples_per_cell.RData")
   if(file.exists(file) & !overwrite){
     load(file)
   }else{
+    # Transform and summarize the data to obtain episome counts per cell
     cell_samples_long <- all_chains %>% 
       select(iteration, chain, grep("[0-9]", names(all_chains), perl = T)) %>% 
       pivot_longer(!c(iteration, chain), names_to = "cluster_id", values_to = "nk") %>% 
@@ -202,6 +263,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
       summarise(number_of_episomes = sum(nk)) %>% 
       ungroup()
     
+    # Separate data for daughter and mother cells
     daughter_cell_samples <- cell_samples_long %>% filter(set == "daughter") %>% 
       select(-set) %>% 
       pivot_wider(names_from = cell_id, values_from = number_of_episomes)
@@ -210,11 +272,12 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
       select(-set) %>% 
       pivot_wider(names_from = cell_id, values_from = number_of_episomes)
     
+    # Save processed data
     save(cell_samples_long, daughter_cell_samples, mother_cell_samples, file = file) 
   }
   
   #####
-  # Convergence Statistics for MCMC
+  # Step 3: Calculate MCMC Convergence Statistics
   #####
   cat("\nChecking convergence of MCMC","\n===")
   file <- here(results_folder, "MCMC_convergence.RData")
@@ -226,7 +289,8 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   }
   
   #####
-  # Fitting distribution of initial number of episomes
+  # Step 4: Distribution Fitting for Mother cells
+  # Fit a Poisson distribution for the initial number of episomes.
   #####
   
   # we will construct the distribution of initial number of episomes using the full set of samples from 
@@ -236,7 +300,8 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   cat("\nlambda:", lambda,"\n===")
   
   #####
-  # Maximum likelihood estimation with grid search
+  # Step 5: Maximum Likelihood Estimation (MLE) with propagated uncertainty
+  # Perform MLE using a subset of MCMC samples.
   #####
   
   cat("\nRunning Maximum Likelihood on", MLE_n_samples, "samples from MCMC")
@@ -314,6 +379,10 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
                                top_95 = MLE_with_uncertainty_CI$probs)
   
   cat("\nDone") 
+  
+  #####
+  # Return Final Results
+  #####
   
   if(!just_Pr){
     return(list(all_chains = all_chains, 
