@@ -1,7 +1,9 @@
 ## 
-# This script contains two functions:
-# 1) run_pipeline() runs the Analysis including MCMC and MLE
-# 2) make_plots() creates figures for the results
+# This script contains four functions:
+# 1) load_data() loads and formats the relevant data 
+# 2) run_pipeline() runs the Analysis including MCMC and MLE
+# 3) figures() creates the figure for the main paper
+# 4) make_plots() creates diagnostic figures with intermediate outputs from run_pipeline()
 
 # load libraries 
 require(tidyverse)
@@ -32,9 +34,7 @@ options(dplyr.summarise.inform = FALSE)
 safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", 
                              "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888")
 
-#####
-# Function to read in data
-#####
+### Function to read in data ###################################################
 
 load_data <- function(mother_cell_file, daughter_cell_file){
   
@@ -66,9 +66,7 @@ load_data <- function(mother_cell_file, daughter_cell_file){
   return(list(daughter_cell_data = daughter_cell_data, mother_cell_data = mother_cell_data))
 }
 
-#####
-# Function to run statistical inference framework
-
+### Function to run statistical inference framework ############################
 
 run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder, 
                          n_iterations = 100000, burn_in = 5000, MLE_n_samples = 100, 
@@ -228,8 +226,8 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
       '\nmean:', inferred_mu, 
       '\nvariance:', inferred_sigma2, 
       '\nstandard deviation:', inferred_sigma,
-        "\n==="
-      )
+      "\n==="
+    )
     
     inferred_mu <- DescTools::Mode(round(all_chains$mu_m))
     inferred_sigma2 <- DescTools::Mode(round(1/all_chains$tau_m))
@@ -240,8 +238,8 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
       '\nmean:', inferred_mu, 
       '\nvariance:', inferred_sigma2, 
       '\nstandard deviation:', inferred_sigma,
-        "\n==="
-      )
+      "\n==="
+    )
   }
   
   
@@ -277,7 +275,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   }
   
   #####
-  # Step 3: Calculate MCMC Convergence Statistics
+  # Step 3: Calculate MCMC Convergence Statistics (Rhat and ESS)
   #####
   cat("\nChecking convergence of MCMC","\n===")
   file <- here(results_folder, "MCMC_convergence.RData")
@@ -310,7 +308,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   samples <- sample(unique(all_chains$iteration), MLE_n_samples, replace = FALSE)
   
   # reformat samples so that we can apply the grid search function: 
-  # need a column for mother cell id, number of cells in daughter cell 1, and number of cells in daughter cecll 2
+  # need a column for mother cell id, number of cells in daughter cell 1, and number of cells in daughter cell 2
   sampled_experimental_data <- cell_samples_long %>%
     filter(chain == "chain1", set == "daughter", iteration %in% samples) %>% 
     # pull in mother and daughter cell ids
@@ -319,6 +317,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
     summarise(X1 = max(number_of_episomes), X2 = ifelse(n() > 1, min(number_of_episomes), 0)) %>% 
     ungroup()
   
+  # Run grid search for each sample
   file <- here(results_folder, "MLE_with_uncertainty.RData")
   if(file.exists(file) & !overwrite){
     load(file)
@@ -365,6 +364,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   
   cat("\n===")
   
+  # Calculate final grid search as sum of all repetitions and normalize to sum to 1:
   MLE_with_uncertainty_df <- MLE_with_uncertainty %>% bind_rows() %>% 
     select(Pr, Ps, probability) %>% 
     group_by(Pr, Ps) %>% summarise(probability = sum(probability)) %>% 
@@ -372,11 +372,14 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
     mutate(probability = probability/sum(probability),
            log_likelihood = log(probability))
   
+  # Calculate joint 95% CI, including uncertainty from MCMC
   MLE_with_uncertainty_CI <- calculate_CI(MLE_with_uncertainty_df)
   
-  MLE_uncertainty_grid <- list(grid_search = MLE_with_uncertainty_df, 
-                               estimates = MLE_with_uncertainty_CI$estimates,
-                               top_95 = MLE_with_uncertainty_CI$probs)
+  MLE_uncertainty_grid <- list(
+    grid_search = MLE_with_uncertainty_df, 
+    estimates = MLE_with_uncertainty_CI$estimates,
+    top_95 = MLE_with_uncertainty_CI$probs
+  )
   
   cat("\nDone") 
   
@@ -385,12 +388,16 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   #####
   
   if(!just_Pr){
-    return(list(all_chains = all_chains, 
-                daughter_cell_samples = daughter_cell_samples, 
-                mother_cell_samples = mother_cell_samples, 
-                convergence_metrics = convergence, 
-                X0_lambda = lambda, 
-                MLE_grid = MLE_uncertainty_grid))
+    return(
+      list(
+        all_chains = all_chains, 
+        daughter_cell_samples = daughter_cell_samples, 
+        mother_cell_samples = mother_cell_samples, 
+        convergence_metrics = convergence, 
+        X0_lambda = lambda, 
+        MLE_grid = MLE_uncertainty_grid
+      )
+    )
   }else{
     if(parallel & !exists("my.cluster")){
       #create the cluster
@@ -464,9 +471,108 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   
 }
 
-#####
-# Function to make diagnostic plots from pipeline output
-#####
+### Function to make figure for main text ######################################
+
+figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples, results_folder){
+  
+  ## Color-blind friendly color palette
+  safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#661100","#117733", "#332288", "#AA4499", 
+                               "#44AA99", "#999933", "#882255",  "#6699CC", "#888888")
+  
+  # Compare number of episomes per mother cells to total number of episomes in daughter cells
+  temp_df <- daughter_cell_samples %>%
+    filter(chain == "chain1") %>%
+    pivot_longer(!c(chain, iteration), 
+                 names_to = c("mother_cell_id",".value"), 
+                 names_pattern = "(.*)_(.)") %>% 
+    mutate(across(everything(), ~replace_na(.x, 0))) %>% 
+    count(mother_cell_id, `1`, `2`) %>% 
+    group_by(mother_cell_id) %>% 
+    mutate(p = n/sum(n)) %>% 
+    filter(n == max(n)) %>% 
+    select(-n) %>% 
+    pivot_longer(c(`1`, `2`), values_to = "n_episomes") %>% 
+    summarise(X1 = max(n_episomes), X2 = ifelse(n() > 1, min(n_episomes), 0), total = sum(n_episomes), p = unique(p)) %>%
+    mutate(pair = paste0("(", X1, ",", X2, ")")) 
+  
+  cat("Percent of daughter cell pairs with equal episomes per cell:\n")
+  print(temp_df %>% count(X1 == X2) %>% mutate(p= n/sum(n)))
+  
+  pair_levels <- temp_df %>% count(pair) %>% arrange(desc(n)) %>% pull(pair)
+  multiple_obs <- temp_df %>% count(pair) %>% filter(n > 1) %>% arrange(desc(n)) %>% pull(pair)
+  if(length(pair_levels) > 10){
+    # pair_labels <- c(multiple_obs[1:10], rep("other", length(pair_levels)-10))  
+    single_obs <- temp_df %>% count(X1, X2) %>% arrange(desc(n)) %>% filter(n == 1) %>% 
+      mutate(label = ifelse(X1 == X2, "other\neven\npairs", "other\nimbalanced\npairs")) %>% 
+      pull(label)
+    
+    pair_labels <- c(multiple_obs, single_obs)
+    
+  }else{
+    pair_labels <- pair_levels
+  }
+  
+  intensity_scatter <- daughter_cell_data %>% 
+    group_by(mother_cell_id, cell_id, daughter_cell) %>% 
+    summarise(total_intensity = sum(total_cluster_intensity)) %>% 
+    group_by(mother_cell_id) %>% 
+    summarise(daughter_1 = max(total_intensity), daughter_2= ifelse(n() > 1, min(total_intensity), 0)) %>% 
+    ggplot(aes(daughter_1, daughter_2)) + 
+    geom_abline(color = "gray", lty = "dashed") + 
+    geom_point(size = 3) + 
+    labs(x = "Total dot intensity of daughter cell with greater intensity",
+         y = "Total dot intensity of daughter cell with less intensity") + 
+    tune::coord_obs_pred() 
+  
+  
+  intensity_distribution <- mother_cell_data %>%
+    group_by(cell_id) %>% summarise(total_cluster_intensity = sum(total_cluster_intensity)) %>%
+    ggplot(aes(total_cluster_intensity, y = after_stat(count / sum(count)))) +
+    geom_histogram(aes(fill = "non-dividing cells", color = "non-dividing cells"), alpha = 0.5) +
+    geom_histogram(data = daughter_cell_data %>% group_by(mother_cell_id) %>%
+                     mutate(int = sum(total_cluster_intensity)),
+                   aes(int, fill = "daughter cell pairs", color = "daughter cell pairs"), alpha = 0.5) +
+    labs(x = "cluster intensity", fill = "cell set", y= "frequency") +
+    scale_y_continuous(labels = scales::percent) +
+    theme(legend.position = c(1,1), legend.justification = c(1,0.9),
+          legend.background = element_blank(), legend.title = element_blank())  +
+    guides(color = "none") +
+    labs(x = "Total dot intensity") +
+    scale_color_manual(values = safe_colorblind_palette) +
+    scale_fill_manual(values = safe_colorblind_palette) 
+  
+  
+  summary <- temp_df  %>%
+    count(pair, X1, X2) %>%
+    arrange(desc(n), X1, X2) %>% 
+    mutate(percent_of_daughter_cell_pairs = n/sum(n)*100, even_pair = X1 == X2) %>% 
+    select(pair, even_pair, number_of_daughter_cell_pairs = n, percent_of_daughter_cell_pairs) 
+  
+  write_csv(summary, here(results_folder, "frequency_of_daughter_cell_pair_inference.csv"))
+  
+  pair_histogram <- temp_df  %>%
+    count(pair, X1, X2) %>%
+    arrange(desc(n), X1, X2) %>% 
+    mutate(pair = fct_inorder(factor(pair, levels = pair_levels, labels = pair_labels))) %>% 
+    ggplot(aes(pair, n)) +
+    geom_bar(stat = "identity") +
+    labs(x = "Estimated number of of episomes in daughter cell pairs",
+         y = "Number of daughter cell pairs") +
+    scale_y_continuous(breaks = seq(0,40, by = 2)) +
+    # scale_fill_manual(values = rev(safe_colorblind_palette[2:11])) +
+    theme(legend.position = "none")
+  
+  figure <- intensity_distribution +
+    intensity_scatter + pair_histogram + 
+    plot_layout(ncol = 1, heights = c(1,2,1)) 
+  
+  ggsave(here(results_folder, "figure.png"), figure, width = 5, height = 10)
+  
+  
+}
+
+### Function to make diagnostic plots from pipeline outpus #####################
+
 
 make_plots <- function(pipeline_output, daughter_cell_data, mother_cell_data, results_folder){
   
@@ -868,106 +974,3 @@ make_plots <- function(pipeline_output, daughter_cell_data, mother_cell_data, re
          width = 7, height = 7)
   
 }
-
-#####
-# Function to make figure for main text
-#####
-
-figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples, results_folder){
-  
-  ## Color-blind friendly color palette
-  safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#661100","#117733", "#332288", "#AA4499", 
-                               "#44AA99", "#999933", "#882255",  "#6699CC", "#888888")
-  
-  # Compare number of episomes per mother cells to total number of episomes in daughter cells
-  temp_df <- daughter_cell_samples %>%
-    filter(chain == "chain1") %>%
-    pivot_longer(!c(chain, iteration), 
-                 names_to = c("mother_cell_id",".value"), 
-                 names_pattern = "(.*)_(.)") %>% 
-    mutate(across(everything(), ~replace_na(.x, 0))) %>% 
-    count(mother_cell_id, `1`, `2`) %>% 
-    group_by(mother_cell_id) %>% 
-    mutate(p = n/sum(n)) %>% 
-    filter(n == max(n)) %>% 
-    select(-n) %>% 
-    pivot_longer(c(`1`, `2`), values_to = "n_episomes") %>% 
-    summarise(X1 = max(n_episomes), X2 = ifelse(n() > 1, min(n_episomes), 0), total = sum(n_episomes), p = unique(p)) %>%
-    mutate(pair = paste0("(", X1, ",", X2, ")")) 
-  
-  cat("Percent of daughter cell pairs with equal episomes per cell:\n")
-  print(temp_df %>% count(X1 == X2) %>% mutate(p= n/sum(n)))
-  
-  pair_levels <- temp_df %>% count(pair) %>% arrange(desc(n)) %>% pull(pair)
-  multiple_obs <- temp_df %>% count(pair) %>% filter(n > 1) %>% arrange(desc(n)) %>% pull(pair)
-  if(length(pair_levels) > 10){
-    # pair_labels <- c(multiple_obs[1:10], rep("other", length(pair_levels)-10))  
-    single_obs <- temp_df %>% count(X1, X2) %>% arrange(desc(n)) %>% filter(n == 1) %>% 
-      mutate(label = ifelse(X1 == X2, "other\neven\npairs", "other\nimbalanced\npairs")) %>% 
-      pull(label)
-    
-    pair_labels <- c(multiple_obs, single_obs)
-    
-  }else{
-    pair_labels <- pair_levels
-  }
-  
-  intensity_scatter <- daughter_cell_data %>% 
-    group_by(mother_cell_id, cell_id, daughter_cell) %>% 
-    summarise(total_intensity = sum(total_cluster_intensity)) %>% 
-    group_by(mother_cell_id) %>% 
-    summarise(daughter_1 = max(total_intensity), daughter_2= ifelse(n() > 1, min(total_intensity), 0)) %>% 
-    ggplot(aes(daughter_1, daughter_2)) + 
-    geom_abline(color = "gray", lty = "dashed") + 
-    geom_point(size = 3) + 
-    labs(x = "Total dot intensity of daughter cell with greater intensity",
-         y = "Total dot intensity of daughter cell with less intensity") + 
-    tune::coord_obs_pred() 
-  
-  
-  intensity_distribution <- mother_cell_data %>%
-    group_by(cell_id) %>% summarise(total_cluster_intensity = sum(total_cluster_intensity)) %>%
-    ggplot(aes(total_cluster_intensity, y = after_stat(count / sum(count)))) +
-    geom_histogram(aes(fill = "non-dividing cells", color = "non-dividing cells"), alpha = 0.5) +
-    geom_histogram(data = daughter_cell_data %>% group_by(mother_cell_id) %>%
-                     mutate(int = sum(total_cluster_intensity)),
-                   aes(int, fill = "daughter cell pairs", color = "daughter cell pairs"), alpha = 0.5) +
-    labs(x = "cluster intensity", fill = "cell set", y= "frequency") +
-    scale_y_continuous(labels = scales::percent) +
-    theme(legend.position = c(1,1), legend.justification = c(1,0.9),
-          legend.background = element_blank(), legend.title = element_blank())  +
-    guides(color = "none") +
-    labs(x = "Total dot intensity") +
-    scale_color_manual(values = safe_colorblind_palette) +
-    scale_fill_manual(values = safe_colorblind_palette) 
-  
-  
-  summary <- temp_df  %>%
-    count(pair, X1, X2) %>%
-    arrange(desc(n), X1, X2) %>% 
-    mutate(percent_of_daughter_cell_pairs = n/sum(n)*100, even_pair = X1 == X2) %>% 
-    select(pair, even_pair, number_of_daughter_cell_pairs = n, percent_of_daughter_cell_pairs) 
-  
-  write_csv(summary, here(results_folder, "frequency_of_daughter_cell_pair_inference.csv"))
-  
-  pair_histogram <- temp_df  %>%
-    count(pair, X1, X2) %>%
-    arrange(desc(n), X1, X2) %>% 
-    mutate(pair = fct_inorder(factor(pair, levels = pair_levels, labels = pair_labels))) %>% 
-    ggplot(aes(pair, n)) +
-    geom_bar(stat = "identity") +
-    labs(x = "Estimated number of of episomes in daughter cell pairs",
-         y = "Number of daughter cell pairs") +
-    scale_y_continuous(breaks = seq(0,40, by = 2)) +
-    # scale_fill_manual(values = rev(safe_colorblind_palette[2:11])) +
-    theme(legend.position = "none")
-  
-  figure <- intensity_distribution +
-    intensity_scatter + pair_histogram + 
-    plot_layout(ncol = 1, heights = c(1,2,1)) 
-  
-  ggsave(here(results_folder, "figure.png"), figure, width = 5, height = 10)
-  
-  
-}
-
