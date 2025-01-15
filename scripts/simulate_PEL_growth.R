@@ -21,6 +21,7 @@ library(here)
 library(patchwork)
 library(scico)
 library(cowplot)
+library(ggrepel)
 theme_set(theme_bw())
 
 source(here("scripts", "functions_simulations.R"))
@@ -248,7 +249,7 @@ all_results <- rbind(
 write_csv(all_results, file = here("results", "PEL_simulations_with_selection", "PEL_replication_threshold_simulations.csv"))
 
 ## Read in results from previous runs
-# all_results <- read_csv(here("results", "PEL_simulations_with_selection", "PEL_replication_threshold_simulations.csv")) 
+# all_results <- read_csv(here("results", "PEL_simulations_with_selection", "PEL_replication_threshold_simulations.csv"))
 # all_results <- all_results %>% mutate(
 #   pRep = factor(pRep, levels = rev(sort(unique(.$pRep)))),
 #   lifespan = fct_inorder(lifespan)
@@ -341,9 +342,10 @@ all_results_seg <- rbind(
                        labels = c("Baseline", paste0(rev(sort(unique(.$pSeg)))[-1]*100, "%")))) 
 
 write_csv(all_results_seg, file = here("results", "PEL_simulations_with_selection", "PEL_segregation_threshold_simulations.csv"))
+
 # all_results_seg <- read_csv(here("results", "PEL_simulations_with_selection", "PEL_segregation_threshold_simulations.csv"))
 # all_results_seg <- all_results_seg %>% mutate(
-#   pRep = factor(pSeg, levels = rev(sort(unique(.$pSeg)))),
+#   pSeg = factor(pSeg, levels = rev(sort(unique(.$pSeg)))),
 #   lifespan = fct_inorder(lifespan)
 # )
 
@@ -379,45 +381,239 @@ ggsave(here("results", "PEL_simulations_with_selection", "PEL_segregation_thresh
        width = 12, height = 10)
        #width = 8, height = 7)
 
+### Simulate more tumors for scenario when tumor cell life span is 1 day #######
+
+many_tumors_reduced_replication_d1 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  seq(0.1, 0.6, by = 0.1), pSeg, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors,
+  stop_time = 125, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 125 days
+  keep_extinct = T,
+  save_baseline_simulations = here("results", "PEL_simulations_with_selection", "baseline_tumor_simulations.csv"),
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_low_pRep.csv")
+)
+
+
+baseline_tumors <- read_csv(here("results", "PEL_simulations_with_selection", "baseline_tumor_simulations.csv")) %>% 
+  filter(run <= 100)
+
+many_tumors_reduced_replication_d1_r7 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  0.7, pSeg, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors,
+  stop_time = 125, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 125 days
+  keep_extinct = F,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep7.csv"),
+  add_to = baseline_tumors
+)
+
+many_tumors_reduced_replication_d1_r75 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  0.75, pSeg, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors,
+  stop_time = 125, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 125 days
+  keep_extinct = F,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep75.csv"),
+  add_to = baseline_tumors
+)
+
+
+many_tumors_reduced_replication_d1_r8 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, pSeg, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors,
+  stop_time = 125, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 125 days
+  keep_extinct = F,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep8.csv"),
+  add_to = baseline_tumors
+)
+
+
+many_tumors_reduced_segregation_d1_s0 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, 0, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors
+  stop_time = 60, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 60 days
+  keep_extinct = F,
+  add_to = baseline_tumors,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg0.csv"),
+)
+
+many_tumors_reduced_segregation_d1_s1 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, 0.1, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors
+  stop_time = 60, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 60 days
+  keep_extinct = F,
+  add_to = baseline_tumors,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg1.csv"),
+)
+
+many_tumors_reduced_segregation_d1_s2 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, 0.2, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors
+  stop_time = 60, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 60 days
+  keep_extinct = F,
+  add_to = baseline_tumors,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg2.csv"),
+)
+
+many_tumors_reduced_segregation_d1_s3 <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, 0.3, # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors
+  stop_time = 60, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 60 days
+  keep_extinct = F,
+  add_to = baseline_tumors,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg3.csv"),
+)
+
+
+many_tumors_reduced_segregation_d1_sbig <- PEL_simulations(
+  pRep, pSeg, # Replication and segregation efficiency before treatment is applied
+  pRep, rev(c(0.2, 0.3, 0.4, 0.5, pSeg)), # Replication and segregation efficiency after treatment is applied
+  b = b_1, d = d_1, # Birth and death rate
+  selection = T, # Simulate with selection
+  treatment_size = 1e5,  # apply treatment when tumor has 1e5 cells
+  max_epi = 9,  # Cap at 9 episomes per cell for book-keeping
+  nRuns = 100, # simulate 100 tumors
+  stop_time = 60, stop_size = 1e6, # Stop simulation when tumor reaches 1e6 cells or 60 days
+  keep_extinct = F,
+  add_to = baseline_tumors,
+  save_treatment_simulations = here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg_big.csv"),
+)
+
+
+# Combine results from individual runs
+
+reduced_rep_100_tumors <- rbind(
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_low_pRep.csv")) %>% filter(pRep != 0.8),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep7.csv")) %>% filter(pRep != 0.8),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep75.csv")) %>% filter(pRep != 0.8),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_pRep8.csv"))
+)
+
+reduced_rep_100_tumors <- reduced_rep_100_tumors %>% 
+  arrange(pRep, run, time) %>% 
+  mutate(pRep = factor(pRep, levels = rev(sort(unique(.$pRep))), labels = paste0(rev(sort(unique(.$pRep)))*100, "%")))
+
+
+reduced_seg_100_tumors <- rbind(
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg0.csv")) %>% filter(pSeg != 0.9),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg1.csv")) %>% filter(pSeg != 0.9),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg2.csv")) %>% filter(pSeg != 0.9),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg3.csv")) %>% filter(pSeg != 0.9),
+  read_csv(here("results", "PEL_simulations_with_selection", "intermediate_treatment_simulations_reduce_pseg_big.csv"))
+) 
+
+reduced_seg_100_tumors <- reduced_seg_100_tumors %>% 
+  arrange(pRep, run, time) %>% 
+  mutate(pSeg = factor(pSeg, levels = rev(sort(unique(.$pSeg))), labels = paste0(rev(sort(unique(.$pSeg)))*100, "%")))
+
 ### Figure for paper with average cell life span of 1 day ######################
 
-## Figure 9
-PEL_paper_figure <- all_results %>% filter(d == d_1) %>% 
-  group_by(run, d) %>% 
+uncontrolled_growth <- read_csv(here("results", "PEL_simulations_with_selection", "baseline_tumor_simulations.csv")) 
+
+## Figure 9 conditional on non-extinction
+PEL_paper_figure <- uncontrolled_growth %>% filter(episomes == -1, run <= 100) %>%
+  ggplot(aes(total, frac, group = interaction(pRep, pSeg))) + 
+  stat_summary(fun.data = "mean_cl_normal", geom = "ribbon", aes(ymin = after_stat(ymin), ymax = after_stat(ymax)), alpha = 0.2, color = NA) +
+  stat_summary(fun.data="mean_cl_normal", geom="smooth", color = "black") + 
+  labs(x = "Tumor Size", y = "Average number of episomes per cell", color = "Segregation Efficiency") +
+  theme(legend.position = c(1,1), legend.justification = c(1.1,1.1)) +
+  coord_cartesian(ylim = c(0, 3)) + 
+  scale_x_log10(breaks = 10^(0:5), labels = expression(1, 10, 10^2, 10^3, 10^4, 10^5)) +
+  
+  plot_spacer() +
+  
+  uncontrolled_growth %>% filter(episomes != -1, run <= 100) %>%
+  ggplot(aes(total, frac, color = as.factor(episomes), group = factor(episomes))) + 
+  stat_summary(fun.data = "mean_cl_normal", geom = "ribbon", aes(ymin = after_stat(ymin), ymax = after_stat(ymax)), alpha = 0.2, color = NA) +
+  stat_summary(fun.data="mean_cl_normal", geom="smooth") + 
+  # Add labels directly to lines:
+  geom_text_repel(data = ~filter(., total == max(total), episomes <= 6, episomes > 0) %>% 
+                    group_by(episomes)  %>% summarise(frac = mean(frac)),
+                  aes(1e5, frac, label = episomes), show.legend = F,
+                  nudge_x = 0.25, nudge_y = 0.01, min.segment.length = 0, box.padding = 0.25, bg.color = "white") +
+  labs(x = "Tumor Size", y = "Relative Abundance", color = "Episomes\nper cell") +
+  scale_color_manual(values = safe_colorblind_palette) +
+  # theme(legend.justification = c(0.5, -0.05)) + 
+  scale_x_log10(breaks = 10^(0:5), labels = expression(1, 10, 10^2, 10^3, 10^4, 10^5)) + 
+  coord_cartesian(ylim = c(0,1)) +
+  
+  plot_spacer() + plot_spacer() + plot_spacer() +
+  
+  reduced_rep_100_tumors %>% filter(episomes == -1) %>% 
+  group_by(run) %>% 
   mutate(t = min(time[which(total == 1e5)]),
          time = time - t,
-         pRep = fct_recode(pRep, `Baseline (80%)` = "Baseline")) %>% 
+         pRep = fct_recode(pRep, `Baseline (80%)` = "80%")) %>% 
   ggplot(aes(time, total,  color = factor(pRep))) + 
-  geom_line(alpha = 0.5, aes(group = interaction(run, pRep, d))) +
-  ggrepel::geom_text_repel(data = . %>% group_by(lifespan, pRep) %>%
+  geom_line(alpha = 0.1, aes(group = interaction(run, pRep))) +
+  ggrepel::geom_text_repel(data = . %>% group_by( pRep) %>%
                              filter(time <= 60, total >= 1e3) %>%
                              summarise(t = min(max(time), 60),
                                        total = max(total[time == t]), time = t) %>% 
                              # filter(time == max(time), episomes == 0) %>% distinct %>% 
                              arrange(pRep),
                            aes(x = time, y = total, label = pRep),
-                           show.legend = FALSE, fontface = 2, nudge_x = c(-10, 10, 10, 10, 15, 10, -15, -10, -15), nudge_y = 0.1, #hjust = 0,  ,
+                           show.legend = FALSE, fontface = 2, 
+                           nudge_x = c(-10, 10, 10, 10, 15, 10, -15, -10, -15), nudge_y = 0.1, #hjust = 0,  ,
                            min.segment.length = 0, box.padding = 0.25, size = 3,  segment.size = 0.25, bg.color = "white") +
   scale_colour_scico_d(palette = "acton", end = 0.9) +
   guides(color = guide_legend(override.aes = list(alpha = 1))) + 
   coord_cartesian(ylim = c(1e3, 1e6), xlim = c(-50, 100)) + 
   labs(x = "Time from treatment (days)", y = "Tumor Size (cells)", 
        color = "Replication\nEfficiency (%)", title = "Reduction in Replication Efficiency") +
+  scale_y_log10(labels = expression(10^3, 10^4, 10^5, 10^6), breaks = 10^c(3:6)) +
+  theme(legend.position = "none") +
   
   plot_spacer() +
   
-  all_results_seg %>%
-  filter(d == d_1) %>% 
-  group_by(run, d) %>% 
+  reduced_seg_100_tumors %>% filter(episomes == -1) %>% 
+  group_by(run) %>% 
   mutate(t = min(time[which(total == 1e5)]),
          time = time - t,
-         pSeg = fct_recode(pSeg, `Baseline (90%)` = "Baseline")) %>% 
-  ggplot(aes(time, total, group = interaction(run, pSeg, d), color = pSeg)) + 
-  geom_line(alpha = 0.5) +
-  ggrepel::geom_text_repel(data = . %>% group_by(lifespan, pSeg) %>%
+         pSeg = fct_recode(pSeg, `Baseline (90%)` = "90%")) %>% 
+  ggplot(aes(time, total, group = interaction(run, pSeg), color = pSeg)) + 
+  geom_line(alpha = 0.1) +
+  ggrepel::geom_text_repel(data = . %>% group_by(pSeg) %>%
                              # filter(time <= 200, total >= 1e3) %>%
                              mutate(t = abs(time - 15)) %>% 
-                             filter(t == min(t), episomes == 0) %>% 
+                             filter(t == min(t)) %>% 
                              arrange(pSeg),
                            aes(x = time, y = total, label = pSeg),
                            direction = "y", nudge_x = c(-20, rep(20, 6)),
@@ -428,13 +624,16 @@ PEL_paper_figure <- all_results %>% filter(d == d_1) %>%
   coord_cartesian(ylim = c(1e3, 1e6), xlim = c(-50, 40)) +
   labs(x = "Time from treatment (days)", y = "Tumor Size (cells)", 
        color = "Segregation\nEfficiency (%)", title = "Reduction in Segregation Efficiency")  + 
+  scale_y_log10(labels = expression(10^3, 10^4, 10^5, 10^6), breaks = 10^c(3:6)) +
+  theme(legend.position = "none") +
   
-  plot_layout(nrow = 1, widths = c(1, 0.1, 1)) & 
-  scale_y_log10(labels = expression(10^3, 10^4, 10^5, 10^6), breaks = 10^c(3:6)) &
-  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+  plot_layout(nrow = 3, widths = c(1, 0.1, 1), heights = c(1, 0.05, 1.25)) & 
+  theme( plot.title = element_text(hjust = 0.5))
 
-ggsave(here("results", "PEL_simulations_with_selection", "PEL_simulations.pdf"),
-       PEL_paper_figure, width = 9, height = 4.5)
+ggsave(here("results", "PEL_simulations_with_selection", "PEL_simulations_updated.pdf"),
+       PEL_paper_figure,
+       width = 10, height = 7.5)
+       
 
 ### Figure for MIDAS poster ####################################################
 
