@@ -174,7 +174,7 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
   end = seq(2*1000, 1e5, by = 1000)
   recordList = c(start, mid, end)
   if(stop_size > max(end)){
-    recordList = c(recordList, seq(1e5, 1.25e5, by = 100), seq(1.25e5, min(1e6, stop_size), by = 5000))
+    recordList = c(recordList, seq(1e5, 1.25e5, by = 2000), seq(1.25e5, min(1e6, stop_size), by = 5000))
     if(stop_size > 1e6) recordList = c(recordList, seq(1e6, stop_size, by = 10000))
   }
   # data <- matrix(NA, nrow=500*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
@@ -209,11 +209,9 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
     #data <- rbind(data, data.frame(run=run, time=times[1], episomes=-1, count = sum((0:9)*cells)))
     for(i in 1:nIts){
       
-      # browser()
-      
       birthVec = rep(b, max_epi + 1)
       if(!is.null(growth_advantage)) birthVec = birthVec*c(1, rep(1 + growth_advantage, max_epi))
-      # browser()
+      
       cells2 = cells
       result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selection, max_epi)
       cells = round(result[[2]])
@@ -250,7 +248,29 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
       
       # print(sum(cells))
       
-      if(sum(cells) == 0) break
+      if(sum(cells) == 0){ # add final record and break
+        for(j in 1:length(cells)){
+          tmp = c(run, times[i+1], j-1, 0, sum(cells)) #added sum cells
+          try({data[z,] <- tmp})
+          z = z+1
+        }
+        tmp = c(run, times[i+1], -1, 0, sum(cells)) #totalEps[i+1])
+        try({data[z,] <- tmp})
+        break
+      } 
+      
+      if(!is.null(stop_time)){
+        if(times[i+1] >= stop_time + start_times[run]){
+          for(j in 1:length(cells)){
+            tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+            try({data[z,] <- tmp})
+            z = z+1
+          }
+          tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+          try({data[z,] <- tmp})
+          break
+        } 
+      }
       
       if(!is.null(stop_size)){
         if(sum(cells) >= stop_size){
@@ -265,18 +285,6 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
         } 
       }
       
-      if(!is.null(stop_time)){
-        if(times[i+1] >= stop_time){
-          for(j in 1:length(cells)){
-            tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
-            try({data[z,] <- tmp})
-            z = z+1
-          }
-          tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
-          try({data[z,] <- tmp})
-          break
-        } 
-      }
       
       # End if we run out of space in data
       if(any(!is.na(data[nrow(data),]))) break
@@ -297,36 +305,52 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
 # Simulates multiple KSHV-dependent tumors (nRuns) growing from one cell, with a reduction in segregation and/or replication efficiency once
 # the tumor reaches a defined size
 PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
-                            stop_size = 1.5e5, treatment_size = 1e5, d = 0, b = 1, growth_advantage = NULL, add_to = NULL, stop_time = NULL){
+                            stop_size = 1.5e5, treatment_size = 1e5, d = 0, b = 1, growth_advantage = NULL, add_to = NULL, stop_time = NULL,
+                            keep_extinct = FALSE, save_baseline_simulations = NULL, save_treatment_simulations = NULL){
   
   if(is.null(add_to)){
-    
-    uncontrolled_growth <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
-                                              n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
-                                              selection, max_epi, stop_size = treatment_size, 
-                                              d = d, b = b, growth_advantage = growth_advantage, stop_time = stop_time)
-    
-    extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
-    
-    print(extinct_runs)
-    
-    while(length(extinct_runs) > 0){
-      
-      nRuns2 <- length(extinct_runs) 
-      
-      uncontrolled_growth2 <- exponential_growth(pRep, pSeg, 1e8, nRuns2, 
-                                                 n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
-                                                 selection, max_epi, stop_size = treatment_size, 
-                                                 d = d, b = b, growth_advantage = growth_advantage, stop_time = stop_time)
-      
-      run_dict <- extinct_runs %>% setNames(1:length(.))
-      
-      uncontrolled_growth2 <- uncontrolled_growth2 %>% mutate(run = recode(run, !!!run_dict))
-      
-      uncontrolled_growth <- rbind(uncontrolled_growth %>% filter(!run %in% extinct_runs),
-                                   uncontrolled_growth2) %>% arrange(run)
+  
+      uncontrolled_growth <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
+                                                n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
+                                                selection, max_epi, stop_size = treatment_size, 
+                                                d = d, b = b, growth_advantage = growth_advantage)
       
       extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
+      
+      print(extinct_runs)
+      
+      if(keep_extinct){
+        extinct_run_dict <- nRuns+1:length(extinct_runs) %>% setNames(extinct_runs)
+        extinct_df <- uncontrolled_growth %>% filter(run %in% extinct_runs) %>% 
+          mutate(pRep = pRep, pSeg = pSeg, run = recode(run, !!!extinct_run_dict))
+      }
+      
+      while(length(extinct_runs) > 0){
+        
+        nRuns2 <- length(extinct_runs) 
+        
+        uncontrolled_growth2 <- exponential_growth(pRep, pSeg, 1e8, nRuns2, 
+                                                   n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
+                                                   selection, max_epi, stop_size = treatment_size, 
+                                                   d = d, b = b, growth_advantage = growth_advantage)
+        
+        run_dict <- extinct_runs %>% setNames(1:length(.))
+        
+        uncontrolled_growth2 <- uncontrolled_growth2 %>% mutate(run = recode(run, !!!run_dict))
+        
+        uncontrolled_growth <- rbind(uncontrolled_growth %>% filter(!run %in% extinct_runs),
+                                     uncontrolled_growth2) %>% arrange(run)
+        
+        extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
+        
+        if(keep_extinct){
+          extinct_run_dict <- max(extinct_run_dict)+1:length(extinct_runs) %>% setNames(extinct_runs)
+          extinct_df <- rbind(extinct_df, 
+                              uncontrolled_growth %>% filter(run %in% extinct_runs) %>% 
+                                mutate(pRep = pRep, pSeg = pSeg, run = recode(run, !!!extinct_run_dict))
+          )
+        }
+        
     }
     
     initial_conditions <- uncontrolled_growth %>% group_by(run) %>% filter(time == max(time), episomes != -1) %>% 
@@ -339,8 +363,12 @@ PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL
     
     out <- uncontrolled_growth %>% mutate(pRep = pRep, pSeg = pSeg)
     
+    if(!is.null(save_baseline_simulations)) write_csv(rbind(out, extinct_df), save_baseline_simulations)
+    
+    cat("Baseline Simulations Done")
+    
   }else{
-  
+    
     initial_conditions <- add_to %>% select(-pRep, - pSeg) %>% 
       group_by(run) %>% filter(time == min(time[total == treatment_size]), episomes != -1) %>% 
       mutate(number = frac*total) %>% distinct %>% ungroup %>% 
@@ -368,7 +396,13 @@ PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL
       
       out <- rbind(out, intervention %>% mutate(pRep = pRep, pSeg = pSeg))
       
+      if(!is.null(save_treatment_simulations)) write_csv(out, save_treatment_simulations)
+      
     }
+  }
+  
+  if(keep_extinct){
+    out <- rbind(out, extinct_df)
   }
   
   return(out %>% arrange(run, time))
