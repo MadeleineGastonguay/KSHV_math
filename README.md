@@ -1,4 +1,4 @@
-# KSHV_mathematical_analysis_tidy
+# KSHV_math
 Mathematical analysis for replication and segregation of KSHV
 
 ## Estimating replication and segregation efficiency
