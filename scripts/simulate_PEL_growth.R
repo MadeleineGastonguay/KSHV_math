@@ -569,7 +569,7 @@ PEL_paper_figure <- uncontrolled_growth %>% filter(episomes == -1, run <= 100) %
                   aes(1e5, frac, label = episomes), show.legend = F,
                   nudge_x = 0.25, nudge_y = 0.01, min.segment.length = 0, box.padding = 0.25, bg.color = "white") +
   labs(x = "Tumor Size", y = "Relative Abundance", color = "Episomes\nper cell") +
-  scale_color_manual(values = safe_colorblind_palette) +
+  scale_color_manual(values = safe_colorblind_palette, labels = c(seq(0,8), "9 or more")) +
   # theme(legend.justification = c(0.5, -0.05)) + 
   scale_x_log10(breaks = 10^(0:5), labels = expression(1, 10, 10^2, 10^3, 10^4, 10^5)) + 
   coord_cartesian(ylim = c(0,1)) +

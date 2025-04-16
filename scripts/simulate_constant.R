@@ -209,8 +209,8 @@ distribution_plot1 <- function(Pr = "100%", Ps = "100%", xlim, facet = F, Pr_fac
   plot <- df %>% 
     ggplot(aes(time, number_of_cells, fill = episomes_per_cell, color = episomes_per_cell)) + 
     geom_bar(position = position_fill(reverse = TRUE), stat = "identity") + 
-    scale_fill_manual(values = safe_colorblind_palette) + 
-    scale_color_manual(values = safe_colorblind_palette) + 
+    scale_fill_manual(values = safe_colorblind_palette, labels = c(seq(0,8), "9 or more")) + 
+    scale_color_manual(values = safe_colorblind_palette, labels = c(seq(0,8), "9 or more")) + 
     coord_cartesian(c(0,xlim)) +
     guides(color = "none") + 
     theme(panel.grid = element_blank())
