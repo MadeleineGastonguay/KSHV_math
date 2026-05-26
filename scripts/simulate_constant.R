@@ -159,7 +159,7 @@ trajectory_plot <- function(Pr, Ps, xlim){
 ## Function to plot the distribution of episomes per cell over time
 # Plotted as stacked barplot
 distribution_plot1 <- function(Pr = "100%", Ps = "100%", xlim, facet = F, Pr_facet = "all", abundance = F){
-  # browser()
+
   PR <- Pr
   PS <- Ps
   
@@ -247,7 +247,7 @@ poster_plot <- trajectory_plot(Pr = "100%", Ps = "100%", 500) +
   
   distribution_plot1(Pr = "100%", Ps = "90%", 500) +
   
-  plot_layout(ncol = 2, byrow = T, heights = c(3,1, 3, 1), guides = "collect") 
+  plot_layout(ncol = 2, byrow = T, heights = c(3,1, 3, 1), guides = "collect") &
   labs(x = "Time (generations)", fill = "Episomes\nper cell") &
   guides(color = "none") & 
   theme(plot.title = element_text(hjust = 0.5)) & 

@@ -112,7 +112,7 @@ example_inference <- fixed_KSHV_results$daughter_cell_samples %>%
   scale_y_continuous(labels = scales::percent, limits = c(0,1), breaks = c(0, 1))  +
   theme(strip.background = element_blank(), strip.text = element_blank()) 
 
-ggsave(here(results_folder, "example_inference.png"), width = 5, height = 1.2)
+ggsave(here(results_folder, "example_inference.png"), example_inference, width = 5, height = 1.2)
 
 ### Post-hoc descriptive statistics ############################################
 
