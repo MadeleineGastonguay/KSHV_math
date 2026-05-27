@@ -430,6 +430,9 @@ average_decay_plot2 <- average_decay_by_Pr_slow_growth2  +
 
 ggsave(here("results", "brk219", "average_decay_slow_growth.png"), average_decay_plot2, width = 9, height = 5, bg = "white")
 
+ggsave(here("results", "brk219", "average_decay_PI.png"), mean_percentiles_slow_growth2 + theme(legend.position = "none"), 
+       width = 6, height = 4, bg = "white")
+
 
 ### Compare distribution of episomes per cell to distribution of LANA dots per cell over time  ####
 
