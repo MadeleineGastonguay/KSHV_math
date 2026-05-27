@@ -477,10 +477,10 @@ epi_for_dist4 <- sample_episomes(brk219_Pr8_randomSeg)
 
 ## Plot results: s
 simulation_data_frame <- rbind(
-  epi_for_dist %>% mutate(sim = "Simulations with 80% Replication Efficiency and 90% Segregation Efficiency"),
-  epi_for_dist4 %>% mutate(sim = "Simulations with 80% Replication Efficiency and 50% Segregation Efficiency"),
-  epi_for_dist2 %>% mutate(sim = "Simulations with 87% Replication Efficiency and 90% Segregation Efficiency"),
-  epi_for_dist3 %>% mutate(sim = "Simulations with 87% Replication Efficiency and Random Segregation")
+  epi_for_dist %>% mutate(sim = "80% Replication Efficiency and 90% Segregation Efficiency"),
+  epi_for_dist4 %>% mutate(sim = "80% Replication Efficiency and 50% Segregation Efficiency"),
+  epi_for_dist2 %>% mutate(sim = "87% Replication Efficiency and 90% Segregation Efficiency"),
+  epi_for_dist3 %>% mutate(sim = "87% Replication Efficiency and Random Segregation")
 ) %>% 
   mutate(sim = fct_inorder(sim))
 
@@ -503,6 +503,8 @@ ks_summary <- ks_summary %>%
   mutate(sim = fct_inorder(sim), sim = factor(sim, labels = levels(simulation_data_frame$sim)))
 
 plot_distribution_comparison <- function(simulation){
+  colors <- colorblind_pal()(6)[-c(1,5)]
+  
   p <- simulation_data_frame %>%
      filter(as.numeric(sim) == simulation) %>% 
      ggplot(aes(factor(day), episomes)) + 
@@ -511,20 +513,23 @@ plot_distribution_comparison <- function(simulation){
        data = LANA_dots %>% rename(episomes = LANA_dots),
        layout = "swarm",      # Replicates beeswarm spacing
        side = "both",         # Distributes points evenly on both sides of the axis
-       dotsize = 1,           # Adjust dot size
+       dotsize = 2,           # Adjust dot size
        binwidth = NA,         # Automatically calculates best bin width,
        color = "black",
        fill = "black",
        alpha = 0.5
      ) +
-     geom_text(data = ks_summary %>% filter(p.value < 0.01, as.numeric(sim) == simulation), aes(factor(day), y = Inf, label = "*"), vjust = 1.1, size = 7) + 
+     geom_text(data = ks_summary %>% filter(p.value < 0.01, as.numeric(sim) == simulation), aes(factor(day), y = Inf, label = "*"), vjust = 1.1, size = 8) + 
      geom_line(data = . %>% group_by(day, sim) %>% summarise(mean = mean(episomes)), aes(x =as.numeric(as.factor(day)), y = mean, color = sim), linewidth = 1) + 
      geom_line(data = LANA_summary, aes(x =as.numeric(as.factor(day)), y = mean), linewidth = 1, alpha = 0.7) + 
-     labs(x = "Day", y = "Number of episomes or\nLANA dots per cell") + 
+     labs(x = "Day", y = "Number of episomes or LANA dots per cell") + 
      theme(legend.position = "none") +
      facet_wrap(~sim, ncol = 1) + 
-     scale_color_viridis_d(end = 0.8, drop = F) + 
-     scale_fill_viridis_d(end = 0.8, drop = F) 
+     # scale_color_viridis_d(end = 0.8, drop = F) + 
+     # scale_fill_viridis_d(end = 0.8, drop = F) +
+    scale_color_manual(values = colors[simulation]) + 
+    scale_fill_manual(values = colors[simulation]) +
+    coord_cartesian(ylim = c(0,65))
   
   return(p)
   
@@ -534,6 +539,17 @@ compare_dists_over_time3 <- plot_distribution_comparison(1) + plot_distribution_
   plot_layout(ncol = 1) & theme(strip.text = element_text(size = 12))
 
 ggsave(here(out_folder, "distributions_of_episomes_over_time.png"), compare_dists_over_time3, width = 9, height = 10)
+
+LANA_dot_summary_figure <- mean_percentiles_slow_growth2 + 
+  labs(y= "Average episomes or LANA dots per cell") + plot_spacer() +
+  plot_distribution_comparison(1) + plot_spacer() + plot_spacer() + plot_spacer() +
+  plot_distribution_comparison(3) + plot_spacer() +
+  plot_distribution_comparison(4) + 
+  plot_layout(ncol = 3, widths = c(1,0.05,1), heights = c(1,0.05,1)) &
+  theme(strip.text = element_text(size = 14)) & 
+  theme(legend.position = "none", axis.title = element_text(size = 12), axis.text = element_text(size = 10))
+
+ggsave(here(out_folder, "LANA_summary_figure.png"), LANA_dot_summary_figure, width = 13, height = 8.5)
 
 ### Find values of replication and segregation efficiency that might better explain the observed data #####
 
