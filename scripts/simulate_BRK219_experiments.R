@@ -4,7 +4,7 @@
 # For each passage, we fit a birth-death model to cell growth data to estimate the birth rate (b) assuming no cell death (d = 0)
 # We initialize the number of episomes per cell based on the distribution of LANA dots per cell at day 0
 # We simulate cell growth using the estimated birth rate for each time period using the 
-  # SUM159-informed estimates of 80% replication efficiency and 90% segregation efficiency
+# SUM159-informed estimates of 80% replication efficiency and 90% segregation efficiency
 # We calculate the percent of cells with episomes, the average number of episomes per cell, and teh distribution of episome copy number per cell over time
 #####
 
@@ -29,7 +29,7 @@ source(here("scripts", "functions_run_pipeline.R"))
 out_folder <- here("results", "brk219")
 
 ### Inputs #####################################################################
-LANA_dots <- read_csv(here("data", "derived", "brk219_LANA_dots.csv"))
+LANA_dots <- read_csv(here("data", "derived", "brk219_full_LANA_dots.csv"))
 GFP <- read_csv(here("data", "derived", "brk219_longitudinal.csv"))
 cell_growth <- read_csv(here("data", "derived", "brk219_cell_growth.csv"))
 
@@ -41,7 +41,8 @@ LANA_summary <- LANA_dots %>%
             var = var(LANA_dots),
             sd = sd(LANA_dots),
             n_zero = sum(LANA_dots == 0),
-            total_dots = sum(LANA_dots))
+            total_dots = sum(LANA_dots),
+            sem = sd/sqrt(n()))
 
 ### Define variation in initial episomes based on distribution of LANA dots at day 0 ####
 day0_LANA <- LANA_dots %>% filter(day == 0) %>% pull(LANA_dots)
@@ -146,7 +147,7 @@ compare_cell_growth_GFP <- ggplot() +
   ) +
   scale_color_manual(values = c("darkblue", "gold3"))  + 
   labs(x = "Time (days)", color = "")
-  
+
 
 ggsave(here(out_folder, "compare_GFP_cell_count.png"), compare_cell_growth_GFP, width = 8, height= 3.5)
 
@@ -254,7 +255,8 @@ brk219_uncertainty_slower_growth <- param_grid %>%
   pmap(sim_passage_wrapper_vary_b, b = best_rs$par, d = 0, no_growth = no_growth,
        initial_episomes = initial_conditions_fewer, passage_times = cut_times)
 
-save(brk219_uncertainty_slower_growth, param_grid, file =  here(out_folder, "brk219_sims_slower_growth.rds"))
+# save(brk219_uncertainty_slower_growth, param_grid, file =  here(out_folder, "brk219_sims_slower_growth.rds"))
+load(here(out_folder, "brk219_sims_slower_growth.rds"))
 
 brk219_uncertainty_slow_growth_df <- 1:nrow(param_grid) %>% 
   map_df(function(i) cbind(param_grid[i,], brk219_uncertainty_slower_growth[[i]]) %>% mutate(trial = i))  %>% 
@@ -269,6 +271,15 @@ traj_by_Pr_slow <- brk219_uncertainty_slow_growth_df %>%
   geom_point(data = GFP, aes(day, percent_GFP_live), size = 2, alpha = 0.74) + 
   geom_line(data = brk219_MLE_vary_b %>% filter(episomes == 0), linewidth = 1) + 
   scale_color_viridis_c("Pr") + 
+  labs(x = "Time (days)", y = "Percent of cells with episomes")
+
+traj_by_Ps_slow <- brk219_uncertainty_slow_growth_df %>% 
+  filter(episomes == 0) %>% 
+  ggplot(aes(time, 100*(1-frac))) + 
+  geom_line(aes(color = pSeg, group = trial), alpha = 0.6) + 
+  geom_point(data = GFP, aes(day, percent_GFP_live), size = 2, alpha = 0.74) + 
+  geom_line(data = brk219_MLE_vary_b %>% filter(episomes == 0), linewidth = 1) + 
+  scale_color_viridis_c("Ps") + 
   labs(x = "Time (days)", y = "Percent of cells with episomes")
 
 ## Function to Calculate 95% prediction interval for either the average number of episomes or the percent of cells with episomes across simulations:
@@ -338,7 +349,7 @@ average_decay_by_Pr_slow_growth <- brk219_uncertainty_slow_growth_df %>%
   geom_line(data = brk219_MLE_vary_b %>% filter(episomes == -1), linewidth  = 1) +
   geom_point(data = GFP, aes(day, mean_GFP_live/max(mean_GFP_live, na.rm = T)*100, shape = "mean GFP"), inherit.aes = F, size = 2.5) +
   geom_point(data = LANA_summary, aes(day, mean/max(mean, na.rm = T)*100, shape = "mean LANA dots"), inherit.aes = F, size = 2.5) +
-  geom_errorbar(data = LANA_summary %>% mutate(min = mean-sd, max = mean+sd),
+  geom_errorbar(data = LANA_summary %>% mutate(min = mean-1.96*sem, max = mean+1.96*sem),
                 aes(day, ymin = min/max(mean, na.rm = T)*100, ymax = max/max(mean, na.rm = T)*100), inherit.aes = F) +
   labs(x = "Time (days)", y = "Percent of signal remaining", color = "Replication\nEfficiency", shape = "") + 
   scale_color_viridis_c(limits = c(0.5,0.95)) +
@@ -358,7 +369,7 @@ mean_percentiles_slow_growth <- percentiles_mean_slow_growth %>%
             aes(time, frac/max(frac)*100, color = "MLE"), linewidth = 1 ) + 
   geom_point(data = GFP, aes(day, mean_GFP_live/max(mean_GFP_live, na.rm = T)*100, shape = "mean GFP"), inherit.aes = F, size = 2.5) + 
   geom_point(data = LANA_summary, aes(day, mean/max(mean, na.rm = T)*100, shape = "mean LANA dots"), inherit.aes = F, size = 2.5) + 
-  geom_errorbar(data = LANA_summary %>% mutate(min = mean-sd, max = mean+sd),
+  geom_errorbar(data = LANA_summary %>% mutate(min = mean-1.96*sem, max = mean+1.96*sem),
                 aes(day, ymin = min/max(mean, na.rm = T)*100, ymax = max/max(mean, na.rm = T)*100), inherit.aes = F) +
   labs(x = "Time (days)", y = "Percent of signal remaining", color = "", shape = "", fill = "") + 
   # scale_color_manual(values = c("blue", "darkgreen", "black")) + 
@@ -381,7 +392,7 @@ average_decay_by_Pr_slow_growth2 <- brk219_uncertainty_slow_growth_df %>%
   geom_line(aes(color = pRep, group = trial), alpha = 0.6) + 
   geom_line(data = brk219_MLE_vary_b %>% filter(episomes == -1), linewidth  = 1) +
   geom_point(data = LANA_summary, aes(day, mean, shape = "mean LANA dots"), inherit.aes = F, size = 2.5) +
-  geom_errorbar(data = LANA_summary %>% mutate(min = mean-sd, max = mean+sd),
+  geom_errorbar(data = LANA_summary %>% mutate(min = mean-1.96*sem, max = mean+1.96*sem),
                 aes(day, ymin = min, ymax = max), inherit.aes = F) +
   labs(x = "Time (days)", y = "Average episomes per cell", color = "Replication\nEfficiency", shape = "") + 
   scale_color_viridis_c(limits = c(0.5,0.95)) 
@@ -393,13 +404,13 @@ mean_percentiles_slow_growth2 <- percentiles_mean_slow_growth %>%
   geom_line(data = brk219_MLE_vary_b %>% filter(episomes == -1),
             aes(time, frac, color = "MLE"), linewidth = 1 ) + 
   geom_point(data = LANA_summary, aes(day, mean, shape = "mean LANA dots"), inherit.aes = F, size = 2.5) +
-  geom_errorbar(data = LANA_summary %>% mutate(min = mean-sd, max = mean+sd),
+  geom_errorbar(data = LANA_summary %>% mutate(min = mean-1.96*sem, max = mean+1.96*sem),
                 aes(day, ymin = min, ymax = max), inherit.aes = F) +
   labs(x = "Time (days)", y = "Average episomes per cell", color = "", shape = "", fill = "") + 
   # scale_color_manual(values = c("blue", "darkgreen", "black")) + 
   scale_color_manual(values = c("black")) + 
   scale_fill_manual(values = c("blue"))  
-  
+
 
 average_decay_plot2 <- average_decay_by_Pr_slow_growth2  + 
   guides(
@@ -420,45 +431,106 @@ average_decay_plot2 <- average_decay_by_Pr_slow_growth2  +
 ggsave(here("results", "brk219", "average_decay_slow_growth.png"), average_decay_plot2, width = 9, height = 5, bg = "white")
 
 
-### For maximum likelihood simulation, compare distribution of episomes per cell to distribution of LANA dots per cell over time  ####
+### Compare distribution of episomes per cell to distribution of LANA dots per cell over time  ####
 
 ## Sample the distribution of episomes per cell at times when experimental data were recorded according to simulations: 
-# Times when data were collected:
-times <- approx(unique(brk219_MLE_vary_b %>% pull(time)), xout = unique(LANA_dots$day))$y
-
-# Create data frame with episomes:
-temp <- brk219_MLE_vary_b %>% 
-  filter(round(time,1) %in% unique(LANA_dots$day), episomes != -1) %>% 
-  group_by(day = round(time)) %>% 
-  filter(time == min(time))
-
-epi_for_dist <- NULL
-for(Day in unique(temp$day)){
-  t <- temp %>% filter(day == Day)
-  total <- unique(t$total)
-  episomes <- c()
-  for(i in 1:nrow(t)){
-    episomes <- c(episomes, rep(t$episomes[i], t$frac[i]*total))
+sample_episomes <- function(simualtion){
+  times <- approx(unique(simualtion %>% pull(time)), xout = unique(LANA_dots$day))$y
+  
+  # Create data frame with episomes:
+  temp <- simualtion %>% 
+    filter(round(time,1) %in% unique(LANA_dots$day), episomes != -1) %>% 
+    group_by(day = round(time)) %>% 
+    filter(time == min(time))
+  
+  epi_for_dist3 <- NULL
+  for(Day in unique(temp$day)){
+    t <- temp %>% filter(day == Day)
+    total <- unique(t$total)
+    episomes <- c()
+    for(i in 1:nrow(t)){
+      episomes <- c(episomes, rep(t$episomes[i], t$frac[i]*total))
+    }
+    epi_for_dist3 <- rbind(epi_for_dist3, data.frame(day = Day, episomes = episomes))
   }
-  epi_for_dist <- rbind(epi_for_dist, data.frame(day = Day, episomes = episomes))
+  
+  return(epi_for_dist3)
 }
 
-## Plot distribution of episomes per cell over time compared to data
-compare_dists_over_time <- rbind(epi_for_dist %>% mutate(data = "Simulated episomes"),
-                                 LANA_dots %>% rename(episomes = LANA_dots) %>% mutate(data = "LANA dots")) %>%
-  ggplot(aes(factor(day), episomes, fill = data, side = data, color = data)) + 
-  # stat_halfeye(alpha = 0.3, .width = 0, point_color = NA, adjust = 1.5) + 
-  stat_halfeye(alpha = 0.3,   point_interval = median_qi, .width = 0.5 , adjust = 1.5, position = position_dodge(width = -0.25)) +
-  scale_side_mirrored() + 
-  scale_fill_manual(values = c("black", "blue")) + 
-  scale_color_manual(values = c("black", "blue")) + 
-  labs(x = "Day", y = "Number of episomes or LANA dots per cell") + 
-  theme(legend.position = "inside", legend.position.inside = c(1,1), legend.justification = c(1,1), 
-        legend.background = element_rect(color = "white", fill = "white"))
+# Maximum likelihood estimates
+epi_for_dist <- sample_episomes(brk219_MLE_vary_b)
 
-ggsave(here(out_folder, "distributions_of_episomes_over_time.png"), compare_dists_over_time, width = 8, height = 4)
+## Add in simulations with Pr = 87%:
+brk219_Pr87 <- sim_passage_wrapper_vary_b(pRep = 0.87, pSeg = 0.9, bs = best_rs$par, d = 0, cut_times, initial_conditions_fewer, no_growth)
+epi_for_dist2 <- sample_episomes(brk219_Pr87)
 
+## Add in simulations with Pr = 87% and random segregation
+brk219_Pr87_randomSeg <- sim_passage_wrapper_vary_b(pRep = 0.87, pSeg = 0.5, bs = best_rs$par, d = 0, cut_times, initial_conditions_fewer, no_growth)
+epi_for_dist3 <- sample_episomes(brk219_Pr87_randomSeg)
 
+## Add in simulations with Pr = 90% and random segregation
+brk219_Pr8_randomSeg <- sim_passage_wrapper_vary_b(pRep = 0.8, pSeg = 0.5, bs = best_rs$par, d = 0, cut_times, initial_conditions_fewer, no_growth)
+epi_for_dist4 <- sample_episomes(brk219_Pr8_randomSeg)
+
+## Plot results: s
+simulation_data_frame <- rbind(
+  epi_for_dist %>% mutate(sim = "Simulations with 80% Replication Efficiency and 90% Segregation Efficiency"),
+  epi_for_dist4 %>% mutate(sim = "Simulations with 80% Replication Efficiency and 50% Segregation Efficiency"),
+  epi_for_dist2 %>% mutate(sim = "Simulations with 87% Replication Efficiency and 90% Segregation Efficiency"),
+  epi_for_dist3 %>% mutate(sim = "Simulations with 87% Replication Efficiency and Random Segregation")
+) %>% 
+  mutate(sim = fct_inorder(sim))
+
+# calculate ks test for each day: 
+ks_summary <- NULL
+for(Day in seq(0,20,by=2)){
+  sim1 <- epi_for_dist %>% filter(day == Day) %>% pull(episomes)
+  sim2 <- epi_for_dist2 %>% filter(day == Day) %>% pull(episomes)
+  sim3 <- epi_for_dist3 %>% filter(day == Day) %>% pull(episomes)
+  sim4 <- epi_for_dist4 %>% filter(day == Day) %>% pull(episomes)
+  data <- LANA_dots %>% filter(day == Day) %>% pull(LANA_dots)
+  ks_summary<- rbind(ks_summary, data.frame(day = Day, V1 = ks.test(sim1, data)$p.value, 
+                                            V2 = ks.test(sim4, data)$p.value,
+                                            V3= ks.test(sim2, data)$p.value,
+                     V4 = ks.test(sim3, data)$p.value))
+}
+
+ks_summary <- ks_summary %>% 
+  pivot_longer(!day, names_to = "sim", values_to = "p.value")  %>% 
+  mutate(sim = fct_inorder(sim), sim = factor(sim, labels = levels(simulation_data_frame$sim)))
+
+plot_distribution_comparison <- function(simulation){
+  p <- simulation_data_frame %>%
+     filter(as.numeric(sim) == simulation) %>% 
+     ggplot(aes(factor(day), episomes)) + 
+     geom_violin(alpha = 0.3, aes(fill = sim,  color = sim), adjust = 2, scale = "width") + 
+     stat_dots(
+       data = LANA_dots %>% rename(episomes = LANA_dots),
+       layout = "swarm",      # Replicates beeswarm spacing
+       side = "both",         # Distributes points evenly on both sides of the axis
+       dotsize = 1,           # Adjust dot size
+       binwidth = NA,         # Automatically calculates best bin width,
+       color = "black",
+       fill = "black",
+       alpha = 0.5
+     ) +
+     geom_text(data = ks_summary %>% filter(p.value < 0.01, as.numeric(sim) == simulation), aes(factor(day), y = Inf, label = "*"), vjust = 1.1, size = 7) + 
+     geom_line(data = . %>% group_by(day, sim) %>% summarise(mean = mean(episomes)), aes(x =as.numeric(as.factor(day)), y = mean, color = sim), linewidth = 1) + 
+     geom_line(data = LANA_summary, aes(x =as.numeric(as.factor(day)), y = mean), linewidth = 1, alpha = 0.7) + 
+     labs(x = "Day", y = "Number of episomes or\nLANA dots per cell") + 
+     theme(legend.position = "none") +
+     facet_wrap(~sim, ncol = 1) + 
+     scale_color_viridis_d(end = 0.8, drop = F) + 
+     scale_fill_viridis_d(end = 0.8, drop = F) 
+  
+  return(p)
+  
+}
+
+compare_dists_over_time3 <- plot_distribution_comparison(1) + plot_distribution_comparison(3) + plot_distribution_comparison(4) &
+  plot_layout(ncol = 1) & theme(strip.text = element_text(size = 12))
+
+ggsave(here(out_folder, "distributions_of_episomes_over_time.png"), compare_dists_over_time3, width = 9, height = 10)
 
 ### Find values of replication and segregation efficiency that might better explain the observed data #####
 
