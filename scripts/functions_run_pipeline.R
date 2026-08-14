@@ -537,7 +537,7 @@ figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples,
     theme(legend.position = c(1,1), legend.justification = c(1,0.9),
           legend.background = element_blank(), legend.title = element_blank())  +
     guides(color = "none") +
-    labs(x = "Total dot intensity") +
+    labs(x = "Total dot intensity per cell or cell pair") +
     scale_color_manual(values = safe_colorblind_palette) +
     scale_fill_manual(values = safe_colorblind_palette) 
   
@@ -556,7 +556,7 @@ figures <- function(daughter_cell_data, mother_cell_data, daughter_cell_samples,
     mutate(pair = fct_inorder(factor(pair, levels = pair_levels, labels = pair_labels))) %>% 
     ggplot(aes(pair, n)) +
     geom_bar(stat = "identity") +
-    labs(x = "Estimated number of of episomes in daughter cell pairs",
+    labs(x = "Estimated number of episomes in daughter cell pairs",
          y = "Number of daughter cell pairs") +
     scale_y_continuous(breaks = seq(0,40, by = 2)) +
     # scale_fill_manual(values = rev(safe_colorblind_palette[2:11])) +
@@ -878,7 +878,7 @@ make_plots <- function(pipeline_output, daughter_cell_data, mother_cell_data, re
     slice(1:10) %>%
     ggplot(aes(pair, n)) +
     geom_bar(stat = "identity") +
-    labs(x = "Number of of episomes in each daughter cell (X1, X2)",
+    labs(x = "Number of episomes in each daughter cell (X1, X2)",
          y = "Number of daughter cell pairs")
   
   
