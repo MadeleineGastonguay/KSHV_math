@@ -42,7 +42,7 @@ cat(length(unique(mother_cell_data$cell_id)), "non-dividing cells with", nrow(mo
 
 # Estimate number of episomes per cell and Replication and Segregation Efficiency
 fixed_KSHV_results <- run_pipeline(daughter_cell_data, mother_cell_data, results_folder,
-                                n_prior = list("geom", 0.5), parallel = T)
+                                n_prior = list("geom", 0.5), parallel = T, overwrite = F)
 
 ### Estimates of Replication and Segregation Efficiency ########################
 
