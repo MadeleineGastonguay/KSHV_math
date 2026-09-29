@@ -27,7 +27,7 @@ makeChildren<- function(pRep, pSeg, numEpisomes){
 }
 
 # Simulates one step of the cell population dynamics (either cell birth or death) and advances the time
-simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero = T, max_epi){
+simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero = T, max_epi, record_selection_deaths = F){
   #all FUN arguments are functions
   #cells is a compressed vector of the number of cells with 0, 1, 2, ... episomes
   if(sum(cells) == 0){
@@ -45,7 +45,12 @@ simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero
       if(selectAgainstZero == TRUE){
         cells[1] <- 0
       }
-      return(list(timeAdvance, cells))
+      if(record_selection_deaths){
+        out <- list(timeAdvance, cells, 0)
+      }else{
+        out <- list(timeAdvance, cells)
+      }
+      return(out)
     }
     else{
       #print("BIRTH")
@@ -63,10 +68,20 @@ simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero
       cells[type] = cells[type]-1
       cells[children[1]+1] = cells[children[1]+1] + 1
       cells[children[2]+1] = cells[children[2]+1] + 1
+      
       if (selectAgainstZero==TRUE){
+        if(record_selection_deaths){
+          selection_deaths <- cells[1]
+        }
         cells[1] <- 0
       }
-      return(list(timeAdvance, cells))
+      
+      if(record_selection_deaths){
+        out <- list(timeAdvance, cells, selection_deaths)
+      }else{
+        out <- list(timeAdvance, cells)
+      }
+      return(out)
     }
   }
 }
@@ -164,7 +179,7 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
 # Simulates multiple populations (nRuns) of exponentially growing cells that may or may not be under selection (selectAgainstZero)
 exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
                                stop_size = NULL, d = 0, b = 1, growth_advantage = NULL, initial_conditions = NULL, 
-                               start_times = 0, stop_time = NULL){
+                               start_times = 0, stop_time = NULL, record_selection_deaths = FALSE){
   
   #try using matrix first and then convert to data frame
   # rm(data)
@@ -175,15 +190,30 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
   recordList = c(start, mid, end)
   if(stop_size > max(end)){
     recordList = c(recordList, seq(1e5, 1.25e5, by = 2000), seq(1.25e5, min(1e6, stop_size), by = 5000))
-    if(stop_size > 1e6) recordList = c(recordList, seq(1e6, stop_size, by = 10000))
+    if(stop_size > 1e6){
+      step = 100000
+      start = 1e6
+      stop = 1e7
+      for(i in 1:(ceiling(log10(stop_size)) - 6)){
+        recordList = c(recordList, seq(start, stop, by = step))  
+        step = step*10
+        start = start*10
+        stop = min(stop*10, stop_size)
+      }
+    } 
   }
   # data <- matrix(NA, nrow=500*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
-  data <- matrix(NA, nrow=100*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5)
+  data <- matrix(NA, nrow=100*(max_epi + 2)*(length(recordList)+1)*nRuns, ncol=5+1*record_selection_deaths)
   # data <- matrix(NA, nrow=nIts*nRuns, ncol=5)
   print(dim(data))
-  names(data) = c("run", "time", "episomes", "frac", "total")
+  if(record_selection_deaths){
+    names(data) = c("run", "time", "episomes", "frac", "total", "selection_deaths")
+  }else{
+    names(data) = c("run", "time", "episomes", "frac", "total")  
+  }
   z = 1
   for(run in 1:nRuns){
+    
     cat("z:", z, "\n")
     cat("run", run, "\n")
     deathVec = rep(d, max_epi + 1)
@@ -199,23 +229,27 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
     totalEps = append(c(sum((0:max_epi)*cells)), rep(0, nIts))
     for(j in 1:length(cells)){
       tmp = c(run, times[1], j-1, cells[j]/sum(cells), sum(cells))
+      if(record_selection_deaths) tmp = c(tmp, 0)
       try({data[z,] <- tmp})
       z=z+1
     }
     
     tmp = c(run, times[1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells))
+    if(record_selection_deaths) tmp = c(tmp, 0)
     try({data[z,] <- tmp})
     z= z+1
+    
     #data <- rbind(data, data.frame(run=run, time=times[1], episomes=-1, count = sum((0:9)*cells)))
     for(i in 1:nIts){
-      
       birthVec = rep(b, max_epi + 1)
       if(!is.null(growth_advantage)) birthVec = birthVec*c(1, rep(1 + growth_advantage, max_epi))
       
       cells2 = cells
-      result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selection, max_epi)
+      result = simStepFlex(pRep, pSeg, cells, birthVec, deathVec, selection, max_epi, record_selection_deaths)
+      
       cells = round(result[[2]])
       times[i+1] = times[i] + result[[1]]
+      
       
       if(any(cells*(birthVec + deathVec) < 0)){
         print(cells)
@@ -236,10 +270,12 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
         #print(i)
         for(j in 1:length(cells)){
           tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+          if(record_selection_deaths) tmp = c(tmp, result[[3]])
           try({data[z,] <- tmp})
           z = z+1
         }
         tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+        if(record_selection_deaths) tmp = c(tmp, result[[3]])
         try({data[z,] <- tmp})
         z= z+1
         #data <- rbind(data, data.frame(run=run, time=times[i+1], episomes=-1, count = sum((0:9)*cells)))
@@ -251,10 +287,12 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
       if(sum(cells) == 0){ # add final record and break
         for(j in 1:length(cells)){
           tmp = c(run, times[i+1], j-1, 0, sum(cells)) #added sum cells
+          if(record_selection_deaths) tmp = c(tmp, result[[3]])
           try({data[z,] <- tmp})
           z = z+1
         }
         tmp = c(run, times[i+1], -1, 0, sum(cells)) #totalEps[i+1])
+        if(record_selection_deaths) tmp = c(tmp, result[[3]])
         try({data[z,] <- tmp})
         break
       } 
@@ -263,10 +301,12 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
         if(times[i+1] >= stop_time + start_times[run]){
           for(j in 1:length(cells)){
             tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+            if(record_selection_deaths) tmp = c(tmp, result[[3]])
             try({data[z,] <- tmp})
             z = z+1
           }
           tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+          if(record_selection_deaths) tmp = c(tmp, result[[3]])
           try({data[z,] <- tmp})
           break
         } 
@@ -276,10 +316,12 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
         if(sum(cells) >= stop_size){
           for(j in 1:length(cells)){
             tmp = c(run, times[i+1], j-1, cells[j]/sum(cells), sum(cells)) #added sum cells
+            if(record_selection_deaths) tmp = c(tmp, result[[3]])
             try({data[z,] <- tmp})
             z = z+1
           }
           tmp = c(run, times[i+1], -1, sum((0:max_epi)*cells)/sum(cells), sum(cells)) #totalEps[i+1])
+          if(record_selection_deaths) tmp = c(tmp, result[[3]])
           try({data[z,] <- tmp})
           break
         } 
@@ -297,7 +339,11 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
   # Remove NAs
   data <- data[complete.cases(data), ]
   data <- data.frame(data)
-  names(data) <- c("run", "time", "episomes", "frac", "total")
+  if(record_selection_deaths) {
+    names(data) <- c("run", "time", "episomes", "frac", "total", "selection_deaths")
+  }else{
+    names(data) <- c("run", "time", "episomes", "frac", "total")
+  }
   return(data)
 }
 
@@ -306,14 +352,15 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
 # the tumor reaches a defined size
 PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
                             stop_size = 1.5e5, treatment_size = 1e5, d = 0, b = 1, growth_advantage = NULL, add_to = NULL, stop_time = NULL,
-                            keep_extinct = FALSE, save_baseline_simulations = NULL, save_treatment_simulations = NULL){
+                            keep_extinct = FALSE, save_baseline_simulations = NULL, save_treatment_simulations = NULL, record_selection_deaths = FALSE){
   
   if(is.null(add_to)){
   
       uncontrolled_growth <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
                                                 n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
                                                 selection, max_epi, stop_size = treatment_size, 
-                                                d = d, b = b, growth_advantage = growth_advantage)
+                                                d = d, b = b, growth_advantage = growth_advantage,
+                                                record_selection_deaths = record_selection_deaths)
       
       extinct_runs <- uncontrolled_growth %>% group_by(run) %>% filter(max(total) < treatment_size) %>% pull(run) %>% unique
       
@@ -332,7 +379,8 @@ PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL
         uncontrolled_growth2 <- exponential_growth(pRep, pSeg, 1e8, nRuns2, 
                                                    n_cells_start = n_cells_start, n_epi_start = n_epi_start, 
                                                    selection, max_epi, stop_size = treatment_size, 
-                                                   d = d, b = b, growth_advantage = growth_advantage)
+                                                   d = d, b = b, growth_advantage = growth_advantage,
+                                                   record_selection_deaths = record_selection_deaths)
         
         run_dict <- extinct_runs %>% setNames(1:length(.))
         
@@ -392,7 +440,8 @@ PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL
       intervention <- exponential_growth(pRep, pSeg, 1e8, nRuns, 
                                          selection = selection, max_epi = max_epi, stop_size = stop_size, 
                                          d = d, b = b, growth_advantage = growth_advantage,
-                                         initial_conditions = initial_conditions, start_times = start_times, stop_time = stop_time) 
+                                         initial_conditions = initial_conditions, start_times = start_times, stop_time = stop_time,
+                                         record_selection_deaths = record_selection_deaths) 
       
       out <- rbind(out, intervention %>% mutate(pRep = pRep, pSeg = pSeg))
       
