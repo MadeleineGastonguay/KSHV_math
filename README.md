@@ -1,6 +1,94 @@
 # KSHV_math
 Mathematical analysis for replication and segregation of KSHV
 
+## Getting started
+
+Open `KSHV_mathematical_analysis.Rproj` in RStudio. All scripts locate files with
+the `here` package relative to the project root, so they should be run from the
+project (not from inside `scripts/`).
+
+Scripts write to a `results/` directory that is not tracked in git. 
+
+### Environment
+
+Package versions are pinned with [renv](https://rstudio.github.io/renv/). The
+project `.Rprofile` activates renv automatically when the project is opened; to
+install the pinned versions:
+
+```r
+renv::restore()
+```
+
+The lockfile targets R 4.4.0. Note that `rstan` compiles from source and needs a
+working C++ toolchain, so the first restore can take a while.
+
+For reference, the packages used directly by the analysis scripts are:
+
+`bayesplot`, `cluster`, `cowplot`, `doParallel`, `factoextra`, `fitdistrplus`,
+`foreach`, `furrr`, `ggbeeswarm`, `ggdist`, `ggExtra`, `ggh4x`, `ggnewscale`,
+`ggrepel`, `ggthemes`, `here`, `Hmisc`, `MASS`, `patchwork`, `purrr`,
+`RColorBrewer`, `rstan`, `scales`, `scico`, `tidyverse`, `tune`, `ggh4x`, and `ggbeeswarm` 
+
+`rstan` is used only for convergence diagnostics (`Rhat`, `ess_bulk`,
+`ess_tail`) in `functions_inference.R` and `functions_run_pipeline.R`.
+
+
+## Data
+
+All data needed to reproduce the analysis are in `data/derived/`. 
+
+### Imaging data (SUM159 cells)
+
+Six Excel files, one dividing/non-dividing pair per experimental condition.
+These are read by `load_data()` in `functions_run_pipeline.R`.
+
+| File | Rows | Mother cells |
+| --- | --- | --- |
+| `fixed_8TR_dividing_cells.xlsx` | 91 | 40 |
+| `fixed_8TR_non_dividing_cells.xlsx` | 98 | — |
+| `fixed_KSHV_dividing_cells.xlsx` | 36 | 33 |
+| `fixed_KSHV_non_dividing_cells.xlsx` | 55 | — |
+| `live_KSHV_dividing_cells.xlsx` | 28 | 23 |
+| `live_KSHV_non_dividing_cells.xlsx` | 31 | — |
+
+**Dividing-cell files** (`*_dividing_cells.xlsx`) supply the daughter-cell data.
+One row per LANA cluster, with the two daughters of each division stored
+side by side:
+
+- `mother_cell_id` — identifier for the division event, linking the daughter pair
+- `Cluster_daughter1` / `Cluster_daughter2` — cluster index within each daughter
+- `Min episome in cluster_daughter1` / `_daughter2` — minimum number of episomes
+  the cluster is known to contain
+- `Total cluster intensity_daughter1` / `_daughter2` — summed LANA fluorescence
+  intensity for the cluster, the observable used to infer episome number
+
+A mother cell with a cluster count in only one daughter has `NA` in the other
+daughter's columns; these are dropped during loading. 
+
+**Non-dividing-cell files** (`*_non_dividing_cells.xlsx`) supply the
+data used to inform the distribution of episomes per mother cell prior to division:
+
+- `Image`, `Cell` — identifiers, combined into `cell_id` during loading
+- `Cluster` — cluster index within the cell (`0` marks a cell with no clusters)
+- `Min episome in cluster` — minimum episomes in the cluster
+- `Total cluster intensity` — summed LANA fluorescence intensity
+
+### Longitudinal data (Brk.219 cells)
+
+Two CSV files used only by `simulate_BRK219_experiments.R`.
+
+`brk219_full_LANA_dots.csv` — 547 rows, one per imaged nucleus.
+
+- `day` — days post-infection; measurements at days 0, 2, 4, …, 20
+- `LANA_dots` — number of LANA dots counted in that nucleus (range 0–58)
+
+`brk219_cell_growth.csv` — 33 rows, one per counting timepoint.
+
+- `day` — day of the passaging experiment, 0 through 45
+- `live_cells` — live cell count, normalized to 1 at day 0
+- `dead_cells` — dead cell count; `NA` for most timepoints (13 of 33 recorded)
+
+
 ## Estimating replication and segregation efficiency
 To calculate estimates of replication and segregation efficiency, run the following scripts for each experimental condition:
 
@@ -31,7 +119,16 @@ to implement Gibbs sampling, compute likelihoods, and quantify uncertainty. The 
 - `run_gibbs()` implements Gibbs sampling to estimate the number of episomes per LANA dot
 - `convergence_results()` calculate convergence heuristics for Gibbs sampling
 
+`run_pipeline()` caches expensive intermediate results as `.RData` files in the
+results folder (`MCMC_samples_per_cluster.RData`, `MCMC_samples_per_cell.RData`,
+`MCMC_convergence.RData`, `MLE_with_uncertainty.RData`,
+`MLE_Pr_with_uncertainty.RData`) and reloads them on subsequent runs. Run with `overwrite = TRUE` to force a re-run.
+
 Supplemental figures S4, S5, and S14 are generated with the **generate_supplemental_figures.R** script.
+
+Histograms for Figures 1 and 4 are generated with **generate_fig1_4_histograms.R**.
+This script has no external inputs — its data are hardcoded — and writes directly
+to `results/`.
 
 ## Simulations
 
@@ -57,10 +154,65 @@ Functions for each of these scenarios are defined in **functions_simulations.R**
 ## Validation of predicted longitudinal episome dynamics
 We evaluated the consistency of model parameters informed by images in SUM159 cells using experiments tracking longitudinal episome dynamics in Brk.219 cells. The interpretation of these longitudinal LANA dot measurements and comparison to SUM159-informed model predictions (Figure S11) is contained in **simulate_BRK219_experiments.R** simulates. It relies on the simulation functions described above.
 
+The script fits piecewise exponential growth rates to the cell counts, converts
+LANA-dot measurements from days to generations, and fits the decay in dot number
+per generation with a negative binomial regression (`MASS::glm.nb`). Replication
+efficiency is recovered from the fitted slope as `Pr = 1 + b`, and the fitted
+intercept gives the mean episome count at day 0 used to seed the simulations. 
+
+Three local helpers are defined in this script rather than in the shared function
+files:
+
+- `simulate_cell_growth_variable()` simulates cell growth with a separate rate per
+  passaging interval
+- `sample_initial_epi()` draws per-cell episome counts from a negative binomial and
+  bins them into the initial-conditions vector the simulator expects
+- `sim_passage_wrapper_vary_b()` runs the passaging simulation with a growth rate
+  that varies by interval
+
+### Run order dependency
+
+**`analyze_fixed_KSHV.R` must be run before `simulate_BRK219_experiments.R`.**
+
+The BRK219 script reads the SUM159 confidence intervals produced by the fixed
+KSHV analysis:
+
+```r
+SUM159_confidence_intervals <- read_csv(here("results", "fixed_KSHV", "MLE_parameter_estimates.csv"))
+```
+
+That file is written by `analyze_fixed_KSHV.R` at line 86. Because `results/` is
+gitignored, it will not exist in a fresh clone, and the BRK219 script will fail
+at this read with a missing-file error. `Pr_CI` and `Ps_CI` are parsed from it
+and used to bracket the simulated confidence bounds.
+
+The BRK219 script also sources `functions_simulations.R`, `functions_inference.R`,
+and `functions_run_pipeline.R`, and reads both `brk219_*.csv` data files directly.
+
+
 ## Benchmarking methods
 
 Bias of the ML estimates can be assessed using synthetic data by running the **benchmark_MLE.R** script (Figures S16, S17). Synthetic data are generated with `simulate_multiple_cells()`, which simulates one division for all cells in a specified population size.
 
 The sensitivity of parameter estimates from MCMC to the choice of prior for $n_k$ can be assessed by running the **benchmark_prior_sensitivity.R** script (Figure S14).
+
+## Output directories
+
+`results/` is gitignored and starts empty. These scripts create their output
+subdirectory on startup if it does not already exist:
+
+| Script | Directory |
+| --- | --- |
+| `analyze_fixed_8TR.R`, `analyze_fixed_KSHV.R`, `analyze_live_KSHV.R` | `results/fixed_8TR/`, `results/fixed_KSHV/`, `results/live_KSHV/` (via `run_pipeline()`) |
+| `generate_supplemental_figures.R` | `results/supplemental_figures/` |
+| `generate_fig1_4_histograms.R` | `results/` |
+| `simulate_constant.R` | `results/simulations_constant/` |
+| `simulate_constant_selection.R` | `results/simulations_constant_selection/` |
+| `simulate_expo_selection.R` | `results/simulations_expo_selection/` |
+| `simulate_PEL_growth.R` | `results/PEL_simulations_with_selection/` |
+| `simulate_BRK219_experiments.R` | `results/brk219/` |
+| `benchmark_prior_sensitivity.R` | `results/supplemental_figures/`, `results/supplemental_figures_updated_pdf_n_prior/` |
+| `benchmark_MLE.R` | `results/benchmarking/` |
+
 
 
