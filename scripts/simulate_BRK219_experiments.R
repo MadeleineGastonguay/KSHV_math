@@ -20,7 +20,6 @@ library(ggthemes)
 library(scales)
 library(fitdistrplus)
 library(ggdist)
-library(brms)
 library(ggnewscale)
 theme_set(theme_minimal())
 
@@ -206,6 +205,13 @@ mean_CI <- fit_confint[2,]
 
 # Use the best estimate of size parameter as simulations indicate that results are not sensitive to 
 # initial variation in episome counts per cell 
+sample_initial_epi <- function(mu, size, n_cell_start = 1e4, max_epi = 150){
+  n_epi_start_fewer <- rnbinom(n_cell_start, mu = mu, size = size)
+  initial_conditions_fewer <- rep(0,max_epi + 1)
+  count_epi <- table(n_epi_start_fewer)
+  initial_conditions_fewer[as.numeric(names(count_epi))+1] <- unname(count_epi)
+  return(initial_conditions_fewer)
+}
 big_epi <- sample_initial_epi(max(mean_CI), fit_nb_day0$estimate[1])
 small_epi <- sample_initial_epi(min(mean_CI), fit_nb_day0$estimate[1])
 
@@ -247,26 +253,9 @@ bs <- data.frame(cut_time = cut_times, b = best_rs$par)
 # calculate generataion = day*b
 temp_df_full <- LANA_dots %>% mutate(cut_time = ts_full) %>% left_join(bs) %>% mutate(generation = day*b)
 
-## Fit decay model with brms:
+## Fit decay model with negative binomial and poisson distribution in MASS:
 # Rate of decay = Pr-1 (since we converted from day to generation)
-LANA_model <- brm(
-  LANA_dots ~ generation,
-  data = temp_df_full,
-  family = negbinomial(link = "log"), 
-  chains = 4,
-  iter = 4000
-)
 
-
-# View results
-summary(LANA_model)
-plot(LANA_model)
-
-# 95% credible interval of Replication Efficiency from these data overlaps with distribution from SUM159:
-1+posterior_summary(LANA_model, probs = c(0.025, 0.975))[2,3:4]
-posterior_summary(LANA_model, probs = c(0.025, 0.975))
-
-# Compare without full posterior: Negative binomial fits better than poisson
 fit_nb_regression <- glm.nb(LANA_dots ~ generation, data = temp_df_full)
 confint(fit_nb_regression)
 
@@ -279,18 +268,15 @@ BIC(fit_pois_regression)
 
 ### Simulate with Pr fit to Brk.219 data: ######################################
 
-# Pull the average number of LANA dots per cell at day 0 from the brms fit 
+# Pull the average number of LANA dots per cell at day 0 from the negative binomial regression
 # (this is the fitted intercept, which needs to be converted from the log scale)
-mu = exp(posterior_summary(LANA_model, probs = c(0.025, 0.975))[1,1])
-n_cell_start = 1e4
-max_epi = 125
-n_epi_start_fewer_brk <- rnbinom(n_cell_start, mu = mu, size = fit_nb_day0$estimate[1])
-initial_conditions_fewer_brk <- rep(0,max_epi + 1)
-count_epi <- table(n_epi_start_fewer_brk)
-initial_conditions_fewer_brk[as.numeric(names(count_epi))+1] <- unname(count_epi)  
+mu = exp(fit_nb_regression$coefficients[1])
+initial_conditions_fewer_brk <- sample_initial_epi(
+  mu, size = fit_nb_day0$estimate[1], n_cell_start = 1e4, max_epi = 125
+  )
 
-# Use pRep estimated from LANA dots in BRK.219
-brk219_pRep <- round(1+posterior_summary(LANA_model)[2,1],2)
+# Use pRep estimated from fitting exponential decay to  LANA dots in BRK.219
+brk219_pRep <- round(1+fit_nb_regression$coefficients["generation"], 2)
 
 BRK219_MLE_vary_b <- sim_passage_wrapper_vary_b(pRep = brk219_pRep, pSeg = 0.9, bs = best_rs$par, d = 0, cut_times, initial_conditions_fewer_brk, no_growth)
 
