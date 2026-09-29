@@ -10,6 +10,7 @@ library(here)
 
 theme_set(theme_bw(base_size = 15))
 
+if(!dir.exists(here("results"))) dir.create(here("results"), recursive = TRUE, showWarnings = FALSE)
 
 #####
 # Make data

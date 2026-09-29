@@ -22,7 +22,7 @@ rerun <- TRUE
 
 out_folder <- here("results","simulations_constant_selection")
 
-if(!file.exists(out_folder)) dir.create(out_folder, showWarnings = F)
+if(!dir.exists(out_folder)) dir.create(out_folder, showWarnings = F, recursive = T)
 
 if(!rerun){
   load(here(out_folder, "constant_pop_3epi.RData"))

@@ -39,7 +39,7 @@ rerun <- FALSE
 
 # Create output folder
 out_folder <- here("results","simulations_constant")
-if(!file.exists(out_folder)) dir.create(out_folder, showWarnings = F)
+if(!dir.exists(out_folder)) dir.create(out_folder, showWarnings = F, recursive = T)
 
 ## Set up a grid of parameters to simulate with and collect all results:
 pReps = c(0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 1)

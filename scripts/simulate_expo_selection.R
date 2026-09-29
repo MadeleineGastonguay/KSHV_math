@@ -30,7 +30,7 @@ rerun <- FALSE
 
 ## create out folder
 out_folder <- here("results","simulations_expo_selection")
-if(!file.exists(out_folder)) dir.create(out_folder, showWarnings = F)
+if(!dir.exists(out_folder)) dir.create(out_folder, showWarnings = F, recursive = T)
 
 if(!rerun){
   # Load results from previous run if they exist

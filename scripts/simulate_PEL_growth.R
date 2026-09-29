@@ -26,6 +26,8 @@ theme_set(theme_bw())
 
 source(here("scripts", "functions_simulations.R"))
 
+out_folder <- here("results", "PEL_simulations_with_selection")
+if(!dir.exists(out_folder)) dir.create(out_folder, recursive = TRUE, showWarnings = FALSE)
 
 ### Tumor growth simulations without treatment #################################
 ## For each d, find b so that observed doubling time is 6 days in the absence of treatment
@@ -634,64 +636,4 @@ ggsave(here("results", "PEL_simulations_with_selection", "PEL_simulations_update
        PEL_paper_figure,
        width = 10, height = 7.5)
        
-
-### Figure for MIDAS poster ####################################################
-
-rep_poster <- all_results %>% filter(d == 1/5) %>% 
-   group_by(run, d) %>% 
-   mutate(t = min(time[which(total == 1e5)]),
-          time = time - t) %>% 
-   mutate(pRep = fct_recode(pRep, `Baseline (80%)` = "Baseline")) %>% 
-   ggplot(aes(time, total, group = interaction(run, pRep, d), color = factor(pRep))) + 
-   geom_line(alpha = 0.5) +
-   ggrepel::geom_text_repel(data = . %>% group_by(lifespan, pRep) %>%
-                              filter(time <= 200, total >= 1e3) %>%
-                              filter(time == max(time), episomes == 0) %>% distinct,
-                            aes(x = time, y = total, label = pRep),
-                            show.legend = FALSE, fontface = 2, nudge_x = 0.25, #hjust = 0,  ,
-                            min.segment.length = 0, box.padding = 0.25, size = 7) +
-   scale_colour_scico_d(palette = "acton", end = 0.9) +
-   guides(color = guide_legend(override.aes = list(alpha = 1))) + 
-   # scale_y_log10() +
-   coord_cartesian(ylim = c(1e3, 1e6), xlim = c(-50, 250)) + 
-   # facet_wrap(~lifespan) +
-   labs(x = "Time from treatment (days)", y = "Tumor Size (cells)", 
-        color = "Replication\nEfficiency (%)", title = "Reduction in Replication Efficiency") + 
-   theme(plot.title = element_text(hjust = 0.5), legend.background = element_blank(),
-         plot.background = element_blank(), legend.box.background = element_blank()) + 
-   theme(legend.position = "none") +
-   scale_y_log10(labels = expression(10^3, 10^4, 10^5, 10^6), breaks = 10^c(3:6)) 
-
-ggsave(here(out_folder, "MIDAS_poster_rep.png"), rep_poster, bg = "transparent",
-       width = 8, height = 7)
-
-seg_poster <- all_results_seg %>%
-  filter(d == 1/5) %>% 
-  group_by(run, d) %>% 
-  mutate(t = min(time[which(total == 1e5)]),
-         time = time - t) %>% 
-  mutate(pSeg = fct_recode(pSeg, `Baseline (90%)` = "Baseline")) %>% 
-  ggplot(aes(time, total, group = interaction(run, pSeg, d), color = pSeg)) + 
-  geom_line(alpha = 0.5) +
-  # ggrepel::geom_text_repel(data = . %>% group_by(lifespan, pSeg) %>%
-  #                            # filter(time <= 200, total >= 1e3) %>%
-  #                            filter(time == max(time), episomes == 0) %>% distinct,
-  #                          aes(x = time, y = total, label = pSeg),
-  #                          show.legend = FALSE, fontface = 2, nudge_y = 0.3, #hjust = 0,  ,
-  #                          min.segment.length = 0, box.padding = 0.25, size = 7) +
-  scale_colour_scico_d(palette = "oslo", end = 0.9) +
-  guides(color = guide_legend(override.aes = list(alpha = 1))) + 
-  # scale_y_log10() +
-  coord_cartesian(ylim = c(1e3, 1e6), xlim = c(-50, 40)) +
-  # facet_wrap(~lifespan) +
-  labs(x = "Time from treatment (days)", y = "Tumor Size (cells)", 
-       color = "Segregation\nEfficiency (%)", title = "Reduction in Segregation Efficiency")  + 
-  theme(plot.title = element_text(hjust = 0.5), legend.background = element_rect(),
-        plot.background = element_blank(), legend.box.background = element_blank()) + 
-  theme(legend.position = c(0.95,0.05), legend.justification = c(1,0)) +
-  scale_y_log10(labels = expression(10^3, 10^4, 10^5, 10^6), breaks = 10^c(3:6)) 
-
-ggsave(here(out_folder, "MIDAS_poster_seg.png"), seg_poster, bg = "transparent",
-       width = 8, height = 7)
-
 

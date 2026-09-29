@@ -29,6 +29,7 @@ source(here("scripts", "functions_inference.R"))
 source(here("scripts", "functions_run_pipeline.R"))
 
 out_folder <- here("results", "brk219")
+if(!dir.exists(out_folder)) dir.create(out_folder, recursive = TRUE, showWarnings = FALSE)
 
 ### Inputs #####################################################################
 LANA_dots <- read_csv(here("data", "derived", "brk219_full_LANA_dots.csv"))
@@ -230,8 +231,8 @@ brk219_CIs_df <- rbind(
 )
 
 
-save(brk219_CIs_df, file = here("results", "brk219", "CI_simulations.rds"))
-# load(here("results", "brk219", "CI_simulations.rds"))
+save(brk219_CIs_df, file = here(out_folder, "CI_simulations.rds"))
+# load(here(out_folder, "CI_simulations.rds"))
 
 
 ### Compare average number of episomes to rate of LANA dots decay ##############
