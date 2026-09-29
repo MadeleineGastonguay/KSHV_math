@@ -260,7 +260,7 @@ temp_df_full <- LANA_dots %>% mutate(cut_time = ts_full) %>% left_join(bs) %>% m
 fit_nb_regression <- MASS::glm.nb(LANA_dots ~ generation, data = temp_df_full)
 confint(fit_nb_regression)
 
-fit_pois_regression <- MASS::glm(LANA_dots ~ generation, data = temp_df_full, family = "poisson")
+fit_pois_regression <- glm(LANA_dots ~ generation, data = temp_df_full, family = "poisson")
 confint(fit_pois_regression)
 
 BIC(fit_nb_regression)

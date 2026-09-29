@@ -24,9 +24,6 @@ require(tune)
 require(doParallel)
 require(foreach)
 
-library(conflicted)
-conflicts_prefer(dplyr::select, dplyr::filter, .quiet = TRUE)
-
 
 select <- dplyr::select
 
