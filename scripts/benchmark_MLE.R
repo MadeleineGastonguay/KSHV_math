@@ -15,6 +15,9 @@ here()
 source(here("scripts", "functions_inference.R"))
 source(here("scripts", "functions_run_pipeline.R"))
 
+out_folder <- here("results", "benchmarking")
+if(!dir.exists(out_folder)) dir.create(out_folder, recursive = TRUE, showWarnings = FALSE)
+
 ### Script inputs ##############################################################
 
 set.seed(400)

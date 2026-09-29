@@ -21,7 +21,6 @@ library(scales)
 library(fitdistrplus)
 library(ggdist)
 library(ggnewscale)
-library(MASS)
 theme_set(theme_minimal())
 
 source(here("scripts", "functions_simulations.R"))
@@ -258,10 +257,10 @@ temp_df_full <- LANA_dots %>% mutate(cut_time = ts_full) %>% left_join(bs) %>% m
 ## Fit decay model with negative binomial and poisson distribution in MASS:
 # Rate of decay = Pr-1 (since we converted from day to generation)
 
-fit_nb_regression <- glm.nb(LANA_dots ~ generation, data = temp_df_full)
+fit_nb_regression <- MASS::glm.nb(LANA_dots ~ generation, data = temp_df_full)
 confint(fit_nb_regression)
 
-fit_pois_regression <- glm(LANA_dots ~ generation, data = temp_df_full, family = "poisson")
+fit_pois_regression <- MASS::glm(LANA_dots ~ generation, data = temp_df_full, family = "poisson")
 confint(fit_pois_regression)
 
 BIC(fit_nb_regression)
