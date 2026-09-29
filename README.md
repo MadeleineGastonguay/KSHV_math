@@ -5,11 +5,11 @@ Mathematical analysis for replication and segregation of KSHV
 To calculate estimates of replication and segregation efficiency, run the following scripts for each experimental condition:
 
 - **analyze_fixed_8TR.R** for estimates from the fixed images of 8TR cells 
-  - results in Figure 2, Figure S4A, Figure S5A, Figure S14A
+  - results in Figure 2, Figure S4A, Figure S5A, Figure S15A
 - **analyze_fixed_KSHV.R** for estimates from the fixed images of KSHV cells 
-  - results in Figure 5, Figure S4C, Figure S5B, Figure S14B
+  - results in Figure 5, Figure S4C, Figure S5B, Figure S15B
 - **analyze_live_KSHV.R** for estimates from the images of live KSHV cells 
-  - results in Figure 6, Figure S4D, Figure S5C, Figure S14C&D
+  - results in Figure 6, Figure S4D, Figure S5C, Figure S15C&D
 
 These estimates rely on functions in the following scripts.
 
@@ -33,7 +33,6 @@ to implement Gibbs sampling, compute likelihoods, and quantify uncertainty. The 
 
 Supplemental figures S4, S5, and S14 are generated with the **generate_supplemental_figures.R** script.
 
-
 ## Simulations
 
 Simulations for four cell-growth scenarios can be run with the following scripts: 
@@ -45,7 +44,7 @@ Simulations for four cell-growth scenarios can be run with the following scripts
 - **simulate_expo_selection.R** simulates an exponentially-growing cell population of immortal cells under selection
   - Figure 8
 - **simulate_PEL_growth.R** simulates a KSHV-dependent tumor under therapy that reduces replication or segregation efficiency
-  - Figures 9, S11, S12
+  - Figures 9, S12, S13
 
 Functions for each of these scenarios are defined in **functions_simulations.R**, along with a few plotting functions. The main simulation functions are:
 
@@ -55,10 +54,13 @@ Functions for each of these scenarios are defined in **functions_simulations.R**
 - `exponential_growth()` Simulates a dividing cell population that grows exponentially until it reaches a designated size. The distribution of episomes in the population is recorded at designated population sizes.
 - `PEL_simulations()` Uses the `exponential_growth()` function to simulate a tumor that grows until it reaches a designated size with a baseline replication and segregation efficiency. Then, replication and/or segregation efficiency is reduced and the tumor is simulated until it reaches a designated size, dies off, or until a specified time.
 
+## Validation of predicted longitudinal episome dynamics
+We evaluated the consistency of model parameters informed by images in SUM159 cells using experiments tracking longitudinal episome dynamics in Brk.219 cells. The interpretation of these longitudinal LANA dot measurements and comparison to SUM159-informed model predictions (Figure S11) is contained in **simulate_BRK219_experiments.R** simulates. It relies on the simulation functions described above.
+
 ## Benchmarking methods
 
-Bias of the ML estimates can be assessed using synthetic data by running the **benchmark_MLE.R** script (Figures S15, S16). Synthetic data is generated with `simulate_multiple_cells()`, which simulates one division for all cells in a specified population size.
+Bias of the ML estimates can be assessed using synthetic data by running the **benchmark_MLE.R** script (Figures S16, S17). Synthetic data are generated with `simulate_multiple_cells()`, which simulates one division for all cells in a specified population size.
 
-The sensitivity of parameter estimates from MCMC to the choice of prior for $n_k$ can be assessed by running the **benchmark_prior_sensitivity.R** script (Figure S13).
+The sensitivity of parameter estimates from MCMC to the choice of prior for $n_k$ can be assessed by running the **benchmark_prior_sensitivity.R** script (Figure S14).
 
 
