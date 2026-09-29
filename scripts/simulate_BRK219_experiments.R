@@ -21,6 +21,7 @@ library(scales)
 library(fitdistrplus)
 library(ggdist)
 library(ggnewscale)
+library(MASS)
 theme_set(theme_minimal())
 
 source(here("scripts", "functions_simulations.R"))
