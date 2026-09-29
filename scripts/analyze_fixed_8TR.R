@@ -171,3 +171,56 @@ mean_intensity_inference <- tibble(
 
 write_csv(mean_intensity_inference, here(results_folder, "mean_epi_per_cell.csv") )
 
+## Calculate the percent of daughter cells receiving the same number of episomes, 
+## accounting for uncertainty in the number of episomes per cell: 
+temp_df <- fixed_8TR_results$daughter_cell_samples %>% filter(chain == 'chain1')
+data_cols <- setdiff(colnames(temp_df), c("chain", "iteration"))
+
+split_cols <- str_split_fixed(data_cols, "_", 2)   # splits at the FIRST underscore only
+
+col_info <- data.frame(
+  col      = data_cols,
+  mother   = split_cols[, 1],
+  daughter = split_cols[, 2],
+  stringsAsFactors = FALSE
+)
+
+# For each sample from the posterior, do daughter cells of the same pair have the same number of episomes? 
+mothers <- unique(col_info$mother)
+match_mat <- sapply(mothers, function(m) {
+  cols <- col_info$col[col_info$mother == m]
+  if (length(cols) == 2) {
+    temp_df[[cols[1]]] == temp_df[[cols[2]]]
+  } else {
+    temp_df[[cols[1]]] == 0
+  }
+})
+
+# For each sample from the posterior, what percent of daughter cell pairs have the same number of episomes? 
+p <- rowMeans(match_mat)
+# Mean or median as a point estimate: 
+point_est <- mean(p)
+# 95% Confidence interval:
+ci <- quantile(p, c(0.025, 0.975))
+
+point_est
+ci
+
+
+# Plot the posterior distribution
+percent_equal_posterior <- data.frame(percent_equal = p) %>% 
+  ggplot(aes(percent_equal)) + 
+  geom_histogram(aes(y = after_stat(count/sum(count))), binwidth = 0.03, fill = "deepskyblue", alpha = 0.7) + 
+  scale_x_continuous(labels = scales::label_percent()) +
+  labs(x = "Percent of daughter cells with equal number of episomes",
+       y = "Probability") + 
+  geom_linerange(xmin = ci[1], xmax = ci[2], y = 0, linewidth = 1) + 
+  geom_vline(xintercept = median(p)) + 
+  ggtitle("Probability distribution for the percent\nof daughter cell pairs with equal episomes")
+
+
+
+
+
+
+
