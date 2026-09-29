@@ -5,6 +5,9 @@
 .DS_Store
 *.RData
 *.csv
-!data
+!data/*
+!data/*/*.csv
 results/simulations_constant_selection/*
 *poster*
+results/*
+data/source/*
