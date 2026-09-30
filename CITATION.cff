@@ -1,19 +1,22 @@
 cff-version: 1.2.0
-title: "KSHV_math: mathematical analysis of KSHV replication and segregation"
-message: "If you use this software, please cite the associated paper."
+title: >-
+  KSHV_math: mathematical analysis of KSHV replication and
+  segregation
+message: >-
+  If you use this software, please cite the associated
+  paper.
 type: software
 authors:
   - family-names: Gastonguay
-    given-names: Madeleine
-    orcid: "https://orcid.org/0000-0002-5700-8543"
-license: CC-BY-4.0
-version: 1.0.0
-date-released: "2026-09-29"
-repository-code: "https://github.com/MadeleineGastonguay/KSHV_math"
+    given-names: Madeleine S
+    orcid: 'https://orcid.org/0000-0002-5700-8543'
+repository-code: 'https://github.com/MadeleineGastonguay/KSHV_math'
 abstract: >-
-  Code to reproduce the analysis and simulations in Juillard et al. (2026),
-  estimating the replication and segregation efficiency of KSHV episomes from
-  fluorescence microscopy images of latently infected cells and simulating long-term episome dynamics.
+  Code to reproduce the analysis and simulations in Juillard
+  et al. (2026), estimating the replication and segregation
+  efficiency of KSHV episomes from fluorescence microscopy
+  images of latently infected cells and simulating long-term
+  episome dynamics.
 keywords:
   - KSHV
   - episome maintenance
@@ -21,9 +24,14 @@ keywords:
   - LANA
   - stochastic simulation
   - math modeling
+license: CC-BY-4.0
+version: 1.0.0
+date-released: '2026-09-30'
 preferred-citation:
   type: article
-  title: "Maintenance of an episomal viral genome through imperfect replication and segregation mechanisms"
+  title: >-
+    Maintenance of an episomal viral genome through imperfect replication and
+    segregation mechanisms
   authors:
     - family-names: Juillard
       given-names: Franceline
@@ -47,6 +55,6 @@ preferred-citation:
       given-names: Alison
     - family-names: Kaye
       given-names: Kenneth
-  journal: "Nucleic Acids Research"
+  journal: Nucleic Acids Research
   year: 2026
-  notes: "In press"
+  notes: In press
