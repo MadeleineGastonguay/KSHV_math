@@ -75,7 +75,7 @@ run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder,
   
   
   # Create the results folder if it does not already exist
-  if(!dir.exists(results_folder)) dir.create(results_folder, showWarnings = F)
+  if(!dir.exists(results_folder)) dir.create(results_folder, showWarnings = F, recursive = T)
   
   #####
   # Step 1: Gibbs Sampling
