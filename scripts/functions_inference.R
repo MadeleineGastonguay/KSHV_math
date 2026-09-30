@@ -24,6 +24,23 @@ likelihood <- function(X1, X2, X0, Pr, Ps){
   return(c("likelihood" = L))
 }
 
+# Replication-only likelihood: the probability of observing daughter counts
+# X1 and X2 from a mother with X0 episomes, given replication efficiency Pr,
+# ignoring segregation.
+#
+# The number of successful replication events is R = X1 + X2 - X0, which is
+# binomial with X0 trials and success probability Pr. Used by the just_Pr
+# branch of the pipeline, where segregation is assumed perfect.
+#
+# Arguments:
+#   X1, X2   Episome counts in the two daughter cells.
+#   X0       Episome count in the mother cell before replication.
+#   Pr       Replication efficiency, in [0, 1].
+#   Ps       Ignored. Present so this can be swapped for likelihood() without
+#            changing the call site.
+#
+# Returns:
+#   A named numeric of length 1, "likelihood".
 likelihood_Pr <- function(X1, X2, X0, Pr, Ps = NA){
   R = X1 + X2 - X0
   # Portion of likelihood that isn't in summation
@@ -78,7 +95,35 @@ calculate_maximum_likelihood <- function(data, Pr_values, Ps_values){
 }
 
 
-# Function to find the parameters Pr and Ps that maximize the likelihood of the observed data, given a PMF for X0
+# Grid search for the replication (Pr) and segregation (Ps) efficiency that
+# maximize the likelihood of the observed daughter-cell counts, marginalizing
+# over the unobserved mother-cell episome count X0.
+#
+# X0 is never observed directly, so for each daughter pair the likelihood is
+# summed over every X0 consistent with the data, weighted by a prior. The
+# support runs from ceiling((X1 + X2) / 2) -- the fewest mother episomes that
+# could yield the observed daughters, achieved when every episome replicates --
+# up to X1 + X2, which is the case where none did. The prior over that support
+# is Poisson(lambda), renormalized to sum to 1.
+#
+# Observations sharing the same (X1, X2) are collapsed and the likelihood is
+# computed once per distinct pair, then weighted by frequency. This is a
+# substantial speed-up for the low-count data here, where many pairs repeat.
+#
+# Arguments:
+#   data        Data frame with columns id, X1, X2 -- daughter-cell episome
+#               counts. X0 is not required and is ignored if present.
+#   Pr_values   Vector of replication efficiencies to evaluate, typically
+#               seq(0, 1, by = increment).
+#   Ps_values   Vector of segregation efficiencies, same convention.
+#   lambda      Rate of the Poisson prior over X0.
+#   just_Pr     If TRUE, estimate replication efficiency alone, assuming perfect
+#               segregation; Ps is set to NA and the Ps grid is not searched.
+#               Default FALSE.
+#
+# Returns:
+#   A data frame with one row per (Pr, Ps) combination and a log_likelihood
+#   column. Pass to calculate_CI() for the confidence region.
 calculate_maximum_likelihood_unknownX0 <- function(data, Pr_values, Ps_values, lambda, just_Pr = F){
   # data will have a column for id, X1, and X2
   
@@ -142,7 +187,38 @@ calculate_maximum_likelihood_unknownX0 <- function(data, Pr_values, Ps_values, l
 }
 
 
-## Function to calculate uncertainty in maximum likelihood estimates
+# Computes the 95% confidence region for the replication (Pr) and segregation
+# (Ps) efficiency from a likelihood surface produced by
+# calculate_maximum_likelihood() or calculate_maximum_likelihood_unknownX0().
+#
+# Log likelihoods are shifted by their maximum, exponentiated, and normalized to
+# sum to 1 across the grid, giving a probability for each (Pr, Ps) box. Boxes
+# are then ranked by probability and accumulated from the most probable
+# downward until the cumulative mass reaches 0.95; the region is the set of
+# boxes included. This is a highest-density region over the normalized
+# likelihood, equivalent to a Bayesian credible region under a flat prior on the
+# grid, rather than a likelihood-ratio confidence region 
+#
+# Arguments:
+#   likelihoods  Data frame with one row per (Pr, Ps) combination and a
+#                log_likelihood column, as returned by the
+#                calculate_maximum_likelihood* functions.
+#   marginal_CI  If FALSE (default), return the joint region: accumulate over
+#                the two-dimensional grid and take the range of Pr and of Ps
+#                among the included boxes. 
+#                If TRUE, sum the probability over one parameter at a time and
+#                accumulate within each margin separately, giving intervals that
+#                ignore the correlation between Pr and Ps.
+#
+# Returns:
+#   A list of two elements:
+#     probs      The ranked probability table. In the joint case this is
+#                filtered to the boxes inside the region; in the marginal case
+#                it is the full grid, unfiltered.
+#     estimates  A one-row data frame with MLE_Pr, MLE_Ps, min_Pr, min_Ps,
+#                max_Pr, max_Ps. The MLE is the single most probable box, so its
+#                resolution is limited by the grid increment.
+#
 calculate_CI <- function(likelihoods, marginal_CI = F){
   probabilities <- likelihoods %>% 
     # Convert to probability
@@ -193,7 +269,33 @@ calculate_CI <- function(likelihoods, marginal_CI = F){
   list(probs = probabilities, estimates = data.frame(MLE_Pr = mle[1], MLE_Ps = mle[2], min_Pr = CI_Pr[1], min_Ps = CI_Ps[1], max_Pr = CI_Pr[2], max_Ps =CI_Ps[2]))
 }
 
-# Function for running a grid search of possible Pr and Ps values, calculate uncertainty, and optionally plot the results
+# Wrapper that runs the Pr/Ps grid search, computes a confidence region, and
+# optionally plots the result. The single entry point used by both the
+# benchmarking scripts and run_pipeline().
+#
+# Arguments:
+#   simulated_data  Data frame with columns id, X1, X2 and (when known_X0 is
+#                   TRUE) X0. Named for its use with synthetic data from
+#                   simulate_multiple_cells(), but real data in the same shape
+#                   works identically.
+#   viz             If TRUE (default), print a plot_grid_search() figure.
+#   increment       Spacing of the Pr and Ps grid over [0, 1]. Default 0.01, so
+#                   101 x 101 combinations. Cost scales with the square, so
+#                   coarsen this first when a search is too slow.
+#   known_X0        If TRUE (default), use the mother-cell count in the data
+#                   directly. If FALSE, marginalize over X0 using lambda.
+#   lambda          Rate of the Poisson prior over X0. Required when
+#                   known_X0 = FALSE, ignored otherwise.
+#   CI              If TRUE (default), compute the confidence region via
+#                   calculate_CI() and include it in the return value.
+#   just_Pr         If TRUE, estimate replication efficiency only. Default FALSE.
+#   marginal_CI     If TRUE, return marginal intervals for Pr and Ps
+#                   separately rather than the joint region. Default FALSE.
+#                   The joint region is what the manuscript reports.
+#
+# Returns:
+#   A list with grid_search (the likelihood surface) and simulated_data; plus
+#   estimates and top_95 when CI = TRUE.
 run_grid_search <- function(simulated_data, viz = T, increment = 0.01, known_X0 = T, lambda = NA, CI = T, just_Pr = F, marginal_CI = F){
   # simulated_data is a data frame simulated with the columns X0, X1, X2, and id (outcome of simulate_multiple_cells)
   # viz is a logical indicating if the results should be visualized
@@ -351,12 +453,41 @@ log_likelihood_n <- function(n, mu, sigma2, I, n_prior){
   log(dnorm(I, n*mu, sqrt(n*sigma2))) + log(prior_prob)
 }
 
-# function to run Gibbs sampling
-# tau0 is the initial guess for tau
-# mu0 is the initial guess for mu
-# I is a named vector of intensity data
-# n_iterations is the number of iterations to run for
-# ns is a named vector with the initialization for the number of episomes per cluster. If not specified, it will be calculated from the intitial estimate of mu0
+# Runs Gibbs sampling to infer the number of episomes per LANA cluster (n), the
+# mean fluorescence intensity of a single episome (mu), and the precision of
+# that intensity (tau), from observed cluster intensities.
+#
+# Each iteration cycles through three conditional draws: n for every cluster in
+# turn, sampled from a categorical distribution over 1 to 100 episomes built
+# from log_likelihood_n(); then mu from its normal conditional; then tau from
+# its gamma conditional. Cluster likelihoods are computed on the log scale and
+# shifted by their maximum before exponentiating, to avoid underflow.
+#
+# Arguments:
+#   tau0          Initial value for tau, the precision (inverse variance) of
+#                 intensity per episome. run_pipeline() uses 1e-5, chosen so the
+#                 implied variance is wide enough for the chain to converge from
+#                 a poor starting point.
+#   mu0           Initial value for mu, the intensity of a single episome.
+#                 run_pipeline() draws this from the range of observed
+#                 intensities.
+#   I             Named numeric vector of observed total cluster intensities,
+#                 one element per cluster, names being cluster_id.
+#   n_iterations  Number of iterations to run. No burn-in is discarded here --
+#                 the caller does that.
+#   ns            Optional named vector of starting episome counts per cluster.
+#                 Defaults to NA, in which case starting values are round(I/mu0)
+#                 with zeros raised to 1. Names must match those of I; the
+#                 vector is reordered to match.
+#   n_prior       Prior on the number of episomes per cluster, as
+#                 list(distribution, parameter) -- e.g. list("pois", 1). Passed
+#                 through to log_likelihood_n(). See
+#                 benchmark_prior_sensitivity.R for the alternatives tested.
+#
+# Returns:
+#   A data frame with n_iterations rows and columns iteration, mu, tau, and one
+#   column per cluster holding that cluster's sampled episome count. Bind
+#   multiple chains together and pass to convergence_results() for diagnostics.
 run_gibbs <- function(tau0, mu0, I, n_iterations, ns = NA, n_prior){
   
   clusters <- names(I)
@@ -419,6 +550,20 @@ get_convergence_stats <- function(data){
   return(tibble(Rhat = Rhat(sims), ESS_bulk = ess_bulk(sims), ESS_tail = ess_tail(sims)))
 }
 
+
+# Computes MCMC convergence diagnostics for every parameter in a set of chains.
+#
+# Reshapes the chains to long form, groups by parameter, and applies
+# get_convergence_stats() to each. Parallelized with future_map, so set a
+# future plan beforehand if you want it to actually run in parallel.
+#
+# Arguments:
+#   all_chains   Data frame of posterior draws with columns chain, iteration,
+#                and one further column per parameter.
+#
+# Returns:
+#   One row per parameter, with the diagnostics from get_convergence_stats()
+#   (Rhat, bulk ESS, tail ESS).
 convergence_results <- function(all_chains){
   convergence <- all_chains %>% 
     pivot_longer(!c(chain, iteration)) %>% 

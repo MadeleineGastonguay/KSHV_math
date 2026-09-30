@@ -26,7 +26,34 @@ makeChildren<- function(pRep, pSeg, numEpisomes){
   }
 }
 
-# Simulates one step of the cell population dynamics (either cell birth or death) and advances the time
+# Advances the population by one Gillespie event: samples which episome class
+# the event happens to, whether it is a birth or a death, and how much time
+# passes.
+#
+# The event class is drawn with probability proportional to cells * (birth +
+# death) rate, and the waiting time is exponential with rate equal to the total
+# propensity across all classes. On a birth, makeChildren() determines how the
+# parent's episomes are replicated and partitioned; daughters exceeding max_epi
+# are truncated to max_epi.
+#
+# Arguments:
+#   pRep, pSeg      Replication and segregation efficiency, each in [0, 1].
+#   cells           Integer vector of length max_epi + 1; element i holds the
+#                   number of cells carrying i - 1 episomes.
+#   birthVec        Per-class birth rates, same length as cells. Callers vary
+#                   this to impose density dependence: extinction() passes a
+#                   logistic rate, exponential_growth() a constant one.
+#   deathVec        Per-class death rates, same length as cells.
+#   selectAgainstZero  If TRUE (default), zero the count of episome-free cells
+#                   after every event, so they cannot persist.
+#   max_epi         Largest episome count represented. Required.
+#   record_selection_deaths  If TRUE, return a third element counting cells
+#                   removed by selection this step. Default FALSE.
+#
+# Returns:
+#   list(timeAdvance, cells), plus a third element when
+#   record_selection_deaths = TRUE. Returns cells unchanged (not a list) if the
+#   population is already empty -- callers should check for this.
 simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero = T, max_epi, record_selection_deaths = F){
   #all FUN arguments are functions
   #cells is a compressed vector of the number of cells with 0, 1, 2, ... episomes
@@ -86,7 +113,45 @@ simStepFlex <- function(pRep, pSeg, cells, birthVec, deathVec, selectAgainstZero
   }
 }
 
-# Simulates multiple populations (nTrials) of cells with a constant size that may or may not be under selection (selectAgainstZero)
+# Simulates nTrials independent cell populations held at approximately constant
+# size (via balanced birth and death rates), tracking the distribution of episomes
+# per cell over time. This function can simulate selection against cells without any
+# episomes.
+#
+# Each trial runs until the population loses all episomes, or until stop_time,
+# or (when pRep and pSeg are both 1) until 700 generations. The episome
+# distribution is recorded every 100 events.
+#
+# Arguments:
+#   pRep               Replication efficiency: probability an episome is
+#                      duplicated before division. In [0, 1].
+#   pSeg               Segregation efficiency: probability a duplicated episome
+#                      is partitioned to the intended daughter. In [0, 1].
+#   nTrials            Number of independent populations to simulate.
+#   n_epi              Episomes per cell at t = 0; every starting cell gets this
+#                      many. Must be <= 9 (the hard cap below).
+#   selectAgainstZero  If TRUE, cells carrying zero episomes die immediately.
+#                      If FALSE (default), they persist and dilute the
+#                      population.
+#   n_cells            Carrying capacity the population fluctuates around.
+#                      Default 1000. Enters the birth rate as a logistic term.
+#   n_cells_start      Starting population size. Defaults to n_cells, i.e. the
+#                      population begins at carrying capacity.
+#   d                  Per-cell death rate. Default 1.
+#   b                  Per-cell birth rate at zero density. Default 3. The
+#                      realized birth rate is (b - d)(1 - N/n_cells) + d.
+#   stop_time          Optional time limit. NULL (default) runs to episome
+#                      extinction.
+#   growth_advantage   Optional multiplier on the birth rate, applied to all
+#                      cells. NULL (default) means no advantage.
+#
+# Note: episome number per cell is capped at 9 in this function (the state
+# vector is length 10). Use exponential_growth() if you need a larger max_epi.
+#
+# Returns:
+#   A data frame in wide form with columns time, trial, total, and zero..nine
+#   giving the number of cells carrying each episome count. Pass to
+#   pivot_extinction() to reshape to long form.
 extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cells = 1000, n_cells_start = NULL,
                        d = 1, b = 3, stop_time = NULL, growth_advantage = NULL){
   
@@ -176,7 +241,62 @@ extinction <- function(pRep, pSeg, nTrials, n_epi, selectAgainstZero = F, n_cell
   return(list(ExtinctionTime = tibble(ExtinctionTime = results), Totals = total_df))
 }
 
-# Simulates multiple populations (nRuns) of exponentially growing cells that may or may not be under selection (selectAgainstZero)
+# Simulates nRuns independent, exponentially growing cell populations, tracking
+# the distribution of episomes per cell as each population expands.
+#
+# Growth is a Gillespie birth-death process with no density dependence, so
+# populations grow without bound until stop_size or stop_time is reached. The
+# episome distribution is recorded at a pre-set list of population sizes rather
+# than at fixed time intervals: densely at small sizes (every cell up to 100,
+# then every 10 up to 1000, every 1000 up to 1e5) and progressively more sparsely
+# above that. This keeps output size manageable across many orders of magnitude
+# of population size.
+#
+# Arguments:
+#   pRep, pSeg        Replication and segregation efficiency, each in [0, 1].
+#   nIts              Maximum simulation steps per run. Sizes the internal time
+#                     vector; make it large enough that stop_size or stop_time
+#                     is reached first.
+#   nRuns             Number of independent populations to simulate.
+#   n_cells_start     Cells at t = 0. Default 1. Ignored when initial_conditions
+#                     is supplied.
+#   n_epi_start       Episomes in each starting cell. Default 3. Ignored when
+#                     initial_conditions is supplied.
+#   selection         If TRUE, cells with zero episomes die immediately.
+#                     Required, no default.
+#   max_epi           Cap on episomes per cell; the state vector has length
+#                     max_epi + 1. Required. Daughters exceeding the cap are
+#                     truncated to max_epi, so set it above the largest count
+#                     the run will plausibly reach or the distribution's upper
+#                     tail will pile up at the cap.
+#   stop_size         Population size at which a run terminates. Also determines
+#                     how far the recording schedule extends, so it must be set
+#                     even when stop_time is the binding constraint.
+#   d                 Per-cell death rate. Default 0 (immortal cells; deaths
+#                     arise only from selection).
+#   b                 Per-cell birth rate. Default 1, which makes one time unit
+#                     one mean cell generation.
+#   growth_advantage  Optional multiplier on the birth rate. NULL for none.
+#   initial_conditions  Optional matrix, one row per run, each row a vector of
+#                     length max_epi + 1 giving the number of cells carrying
+#                     0, 1, ... max_epi episomes at t = 0. Overrides
+#                     n_cells_start and n_epi_start. This is how
+#                     simulate_BRK219_experiments.R seeds runs from the fitted
+#                     negative binomial (see sample_initial_epi()).
+#   start_times       Starting time for each run. A single value is recycled
+#                     across runs; a vector of length nRuns sets them
+#                     individually. Default 0.
+#   stop_time         Optional time limit, in the same units as 1/b. NULL runs
+#                     until stop_size.
+#   record_selection_deaths  If TRUE, add a selection_deaths column counting
+#                     cells removed by selection at each recorded step.
+#                     Default FALSE.
+#
+# Returns:
+#   A long data frame with columns run, time, episomes, frac, total (plus
+#   selection_deaths when requested). Rows with episomes == -1 hold the mean
+#   episomes per cell rather than the frequency of a specific count; filter on
+#   this to separate the average from the distribution.
 exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
                                stop_size = NULL, d = 0, b = 1, growth_advantage = NULL, initial_conditions = NULL, 
                                start_times = 0, stop_time = NULL, record_selection_deaths = FALSE){
@@ -348,8 +468,58 @@ exponential_growth <- function(pRep, pSeg, nIts, nRuns, n_cells_start = 1, n_epi
 }
 
 
-# Simulates multiple KSHV-dependent tumors (nRuns) growing from one cell, with a reduction in segregation and/or replication efficiency once
-# the tumor reaches a defined size
+# Simulates nRuns KSHV-dependent tumors growing from n_cells_start cells, then
+# applies a "treatment" that reduces replication and/or segregation efficiency
+# once the tumor reaches treatment_size.
+#
+# Runs that go extinct before reaching treatment_size are re-simulated until
+# nRuns tumors survive to treatment, so the treated cohort is always full size.
+# Set keep_extinct = TRUE to retain the discarded trajectories instead.
+#
+# Arguments:
+#   pRep, pSeg           Baseline replication and segregation efficiency, used
+#                        for growth up to treatment_size. In [0, 1].
+#   pRep_reduced         Post-treatment replication efficiency. May be a vector
+#                        to simulate several treatment strengths in one call;
+#                        pass c(reduced, pRep) to include an untreated control.
+#                        NULL leaves replication unchanged.
+#   pSeg_reduced         Post-treatment segregation efficiency, same convention.
+#                        NULL leaves segregation unchanged.
+#   nRuns                Number of tumors that must survive to treatment.
+#   n_cells_start        Cells at t = 0. Default 1.
+#   n_epi_start          Episomes in each starting cell. Default 3.
+#   selection            If TRUE, cells with zero episomes die immediately (the
+#                        KSHV-dependent tumor assumption). Required, no default.
+#   max_epi              Cap on episomes per cell; the state vector has length
+#                        max_epi + 1. Required. Book-keeping only, so set it
+#                        above the largest count the simulation will reach.
+#   stop_size            Population size at which a run terminates. Default
+#                        1.5e5.
+#   treatment_size       Population size at which the reduced efficiencies take
+#                        effect. Default 1e5.
+#   d                    Per-cell death rate. Default 0 (immortal cells; deaths
+#                        come only from selection).
+#   b                    Per-cell birth rate. Default 1, so time is in units of
+#                        cell generations.
+#   growth_advantage     Optional multiplier on the birth rate. NULL for none.
+#   add_to               Optional output from a previous call. When supplied,
+#                        the baseline growth phase is skipped and treatment is
+#                        applied to those existing trajectories, which saves
+#                        re-simulating the pre-treatment phase across scenarios.
+#   stop_time            Optional time limit, in the same units as 1/b.
+#   keep_extinct         If TRUE, retain trajectories that died before reaching
+#                        treatment_size, renumbered after the surviving runs.
+#                        Default FALSE discards them.
+#   save_baseline_simulations   Optional path to save pre-treatment
+#                        trajectories to, for reuse via add_to.
+#   save_treatment_simulations  Optional path to save post-treatment
+#                        trajectories to.
+#   record_selection_deaths     If TRUE, record how many cells were removed by
+#                        selection at each step. Default FALSE.
+#
+# Returns:
+#   A long data frame with columns run, time, episomes, frac, total, plus pRep
+#   and pSeg identifying the treatment scenario.
 PEL_simulations <- function(pRep, pSeg, pRep_reduced = NULL, pSeg_reduced = NULL, nRuns, n_cells_start = 1, n_epi_start = 3, selection, max_epi, 
                             stop_size = 1.5e5, treatment_size = 1e5, d = 0, b = 1, growth_advantage = NULL, add_to = NULL, stop_time = NULL,
                             keep_extinct = FALSE, save_baseline_simulations = NULL, save_treatment_simulations = NULL, record_selection_deaths = FALSE){
@@ -482,6 +652,21 @@ number_over_time <- function(extinction_long){
     facet_wrap(~episomes_per_cell)
 }
 
+# Plots the fraction of the population carrying each episome count over time.
+#
+# Companion to number_over_time(), which plots absolute cell counts instead.
+# Fractions are computed within each timepoint, so they sum to 1 at every time.
+#
+# Arguments:
+#   extinction_long   Long-form simulation output from pivot_extinction(), with
+#                     columns time, trial, episomes_per_cell, number_of_cells.
+#   multiple          Set TRUE when the data frame pools several parameter
+#                     combinations, so that fractions are computed within each
+#                     (time, trial, pRep, pSeg) group rather than within
+#                     (time, trial) alone. Default FALSE.
+#
+# Returns:
+#   A ggplot object.
 fraction_over_time <- function(extinction_long, multiple = F){
   if(!multiple){
     df <- extinction_long %>% 

@@ -68,6 +68,48 @@ load_data <- function(mother_cell_file, daughter_cell_file){
 
 ### Function to run statistical inference framework ############################
 
+# Runs the full inference pipeline: Gibbs sampling to infer episome number per
+# cluster, followed by a maximum likelihood grid search for replication (Pr) and
+# segregation (Ps) efficiency.
+#
+# Expensive intermediate results are cached as .RData files in results_folder and
+# reloaded on subsequent calls unless overwrite = TRUE. Delete the files or set
+# overwrite = TRUE to force a re-run.
+#
+# Arguments:
+#   daughter_cell_data  Daughter-cell data frame from load_data(); one row per
+#                       LANA cluster, with columns cell_id, cluster_id,
+#                       total_cluster_intensity, min_episome_in_cluster.
+#   mother_cell_data    Mother-cell data frame from load_data(), same columns.
+#                       Used to inform the intensity of a single episome.
+#   results_folder      Path to write cached samples and figures to. Created
+#                       (recursively) if it does not exist.
+#   n_iterations        Gibbs iterations per chain. Default 1e5. Reduce for a
+#                       smoke test; convergence will not hold at small values.
+#   burn_in             Iterations discarded from the start of each chain before
+#                       summarizing. Default 5000.
+#   MLE_n_samples       Number of posterior draws of episome number carried into
+#                       the likelihood grid search. Default 100. Controls how
+#                       uncertainty in episome count propagates into the Pr/Ps
+#                       estimate; larger is slower.
+#   same_mu             If TRUE (default), a single intensity-per-episome
+#                       parameter mu and precision (tau) is shared across all cells. 
+#						If FALSE, mu and tau are is estimated separately in mother cells and 	
+#						daughter cells.                       
+#   overwrite           If TRUE, re-run every step and overwrite cached .RData
+#                       files. If FALSE (default), reload whatever is cached.
+#   n_prior             Prior on the number of episomes per cluster (nk), as
+#                       list(distribution, parameter). Default list("pois", 1) is
+#                       Poisson with rate 1. See benchmark_prior_sensitivity.R
+#                       for the alternatives tested.
+#   parallel            If TRUE, run chains in parallel via furrr. Requires a
+#                       future plan to be set by the caller.
+#   just_Pr             If TRUE, estimate replication efficiency only, marginalized over 
+#                       segregation. Used for the Pr-only comparison.
+#
+# Returns:
+#   Invisibly, the fitted objects; the substantive outputs are the .RData files
+#   and the MLE_parameter_estimates.csv written to results_folder.
 run_pipeline <- function(daughter_cell_data, mother_cell_data, results_folder, 
                          n_iterations = 100000, burn_in = 5000, MLE_n_samples = 100, 
                          same_mu = T, overwrite = F, n_prior = list("pois", 1), parallel = F,
