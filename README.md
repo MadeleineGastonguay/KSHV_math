@@ -218,3 +218,4 @@ subdirectory on startup if it does not already exist:
 
 
 
+For questions and concerns, post an issue or contact Maddie Gastonguay (mgaston1@jh.edu) and Alison Hill (alison.hill@utoronto.ca).
