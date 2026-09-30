@@ -1,5 +1,7 @@
 # KSHV_math
-Mathematical analysis for replication and segregation of KSHV
+Mathematical analysis for replication and segregation of KSHV. This repo contains code
+necessary to recreate the results in Juillard *et al*. Maintenance of an episomal viral genome 
+through imperfect replication and segregation mechanisms. *Nucleic Acids Research* (2026).
 
 ## Getting started
 
