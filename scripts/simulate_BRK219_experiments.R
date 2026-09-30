@@ -287,7 +287,7 @@ BRK219_MLE_vary_b <- sim_passage_wrapper_vary_b(pRep = brk219_pRep, pSeg = 0.9, 
 t_common <- seq(0, max(brk219_CIs_df$time), length.out = 200)
 
 interpolated_sims <- brk219_CIs_df %>% 
-  filter(pSeg == 1, episomes == -1) %>% 
+  filter(pSeg == max(pSeg), episomes == -1) %>% 
   group_by(trial, pRep) %>% 
   reframe(
     frac = approx(x = time, y = frac, xout = t_common, rule = 2)$y,
@@ -297,7 +297,7 @@ interpolated_sims <- brk219_CIs_df %>%
 
 ribbon_df <- interpolated_sims %>% 
   select(time, frac, pRep) %>% 
-  mutate(pRep = ifelse(pRep == 0.9, "max", "min")) %>% 
+  mutate(pRep = ifelse(pRep == max(pRep), "max", "min")) %>% 
   pivot_wider(names_from = pRep, values_from = frac) 
 
 
