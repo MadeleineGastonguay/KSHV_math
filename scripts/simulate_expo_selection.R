@@ -45,7 +45,7 @@ if(!rerun){
   
   expo_3epi_df <- param_grid %>% 
     pmap_df(function(pRep, pSeg, n_cells_start, n_epi_start) {
-      result <- exponential_growth(pRep, pSeg, nIts = 150000, nRuns = 100, n_cells_start, n_epi_start, selection = TRUE, max_epi = 9)
+      result <- exponential_growth(pRep, pSeg, nIts = 150000, nRuns = ntrials, n_cells_start, n_epi_start, selection = TRUE, max_epi = 9)
       cbind(data.frame(pRep = pRep, pSeg = pSeg, n_cells_start = n_cells_start), result)
     }) %>% 
     rename(Pr = pRep, Ps = pSeg, episomes_per_cell = episomes, trial = run, n_cells = n_cells_start) %>% 
