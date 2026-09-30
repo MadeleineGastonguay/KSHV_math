@@ -3,6 +3,8 @@ Mathematical analysis for replication and segregation of KSHV. This repo contain
 necessary to recreate the results in Juillard, F. *et al*., Maintenance of an episomal viral genome 
 through imperfect replication and segregation mechanisms. *Nucleic Acids Research* (2026).
 
+Release at time of publication: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23066013.svg)](https://doi.org/10.5281/zenodo.23066013)
+
 ## Getting started
 
 Open `KSHV_mathematical_analysis.Rproj` in RStudio. All scripts locate files with
